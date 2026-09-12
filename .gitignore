@@ -22,3 +22,5 @@ Thumbs.db
 
 # Excel lock files
 ~$*
+.admin-password.txt
+api/.admin-password.txt

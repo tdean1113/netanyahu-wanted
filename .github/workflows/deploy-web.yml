@@ -34,8 +34,8 @@ jobs:
       - run: npm run build
         env:
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
-          # Omit or set false until production Square keys are live (button shows Testing Purchase Only)
           VITE_SQUARE_LIVE: ${{ vars.VITE_SQUARE_LIVE }}
+          VITE_BASE_PATH: /netanyahu-wanted/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web/dist
