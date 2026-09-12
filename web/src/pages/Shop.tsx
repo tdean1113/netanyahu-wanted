@@ -13,13 +13,13 @@ import {
   type DonationOrgId,
 } from '../lib/donations'
 
-/** Main hero on load — not repeated in the thumbnail strip (matches original). */
+/** Large tilted hero — always shown in the main slot; also first gallery slide. */
 const HERO = {
   src: '/images/tilted.png',
   alt: 'Bronze ICC Arrest Warrant Issued commemorative medal, obverse, tilted',
 }
 
-/** Thumbnail list only — three images, same as original shop. */
+/** Thumbnail strip — three images below the hero. */
 const THUMBS = [
   { src: '/images/obverse.png', alt: 'Medal obverse' },
   {
@@ -31,6 +31,9 @@ const THUMBS = [
     alt: 'Medal in presentation case',
   },
 ]
+
+/** Fullscreen gallery order: hero + strip. */
+const GALLERY = [HERO, ...THUMBS]
 
 const SPECS = [
   ['Size', '60mm'],
@@ -65,8 +68,7 @@ function recipientsToDonations(
 }
 
 export default function Shop() {
-  const [activeImage, setActiveImage] = useState(HERO)
-  const [lightbox, setLightbox] = useState(false)
+  const [galleryIndex, setGalleryIndex] = useState<number | null>(null)
   const [qty, setQty] = useState(1)
   const [recipients, setRecipients] = useState<Array<DonationOrgId | null>>([
     null,
@@ -76,6 +78,9 @@ export default function Shop() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const checkoutLive = import.meta.env.VITE_SQUARE_LIVE === 'true'
+  const galleryOpen = galleryIndex != null
+  const galleryImage =
+    galleryIndex == null ? null : GALLERY[galleryIndex] ?? null
 
   useEffect(() => {
     document.title = 'ICC Arrest Warrant Medal — A$280 with A$140 Donation'
@@ -91,6 +96,36 @@ export default function Shop() {
         /* keep defaults when API offline */
       })
   }, [])
+
+  useEffect(() => {
+    if (!galleryOpen) return
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setGalleryIndex(null)
+        return
+      }
+      if (e.key === 'ArrowLeft') {
+        setGalleryIndex((i) =>
+          i == null ? i : (i - 1 + GALLERY.length) % GALLERY.length,
+        )
+        return
+      }
+      if (e.key === 'ArrowRight') {
+        setGalleryIndex((i) =>
+          i == null ? i : (i + 1) % GALLERY.length,
+        )
+      }
+    }
+
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prevOverflow
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [galleryOpen])
 
   const missingCount = useMemo(
     () => recipients.filter((r) => r == null).length,
@@ -183,32 +218,27 @@ export default function Shop() {
             <button
               type="button"
               className="mb-4 w-full rounded-2xl border border-line bg-panel p-6"
-              onClick={() => setLightbox(true)}
-              aria-label="Enlarge image"
+              onClick={() => setGalleryIndex(0)}
+              aria-label="Open image gallery"
             >
               <img
-                src={activeImage.src}
-                alt={activeImage.alt}
+                src={HERO.src}
+                alt={HERO.alt}
                 className="mx-auto w-full max-w-md"
               />
             </button>
             <div className="grid grid-cols-3 gap-3">
-              {THUMBS.map((image) => {
-                const selected = activeImage.src === image.src
-                return (
-                  <button
-                    key={image.src}
-                    type="button"
-                    onClick={() => setActiveImage(image)}
-                    className={`rounded-xl border bg-panel p-2 ${
-                      selected ? 'border-ink' : 'border-line'
-                    }`}
-                    aria-label="Enlarge image"
-                  >
-                    <img src={image.src} alt={image.alt} />
-                  </button>
-                )
-              })}
+              {THUMBS.map((image, thumbIndex) => (
+                <button
+                  key={image.src}
+                  type="button"
+                  onClick={() => setGalleryIndex(thumbIndex + 1)}
+                  className="rounded-xl border border-line bg-panel p-2"
+                  aria-label={`Open gallery at ${image.alt}`}
+                >
+                  <img src={image.src} alt={image.alt} />
+                </button>
+              ))}
             </div>
 
             <div className="mt-8 rounded-2xl border border-line bg-panel p-5">
@@ -521,18 +551,68 @@ export default function Shop() {
       </div>
       <SiteFooter />
 
-      {lightbox ? (
+      {galleryOpen && galleryImage ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6"
-          onClick={() => setLightbox(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 sm:p-8"
+          onClick={() => setGalleryIndex(null)}
           role="dialog"
           aria-modal="true"
+          aria-label="Medal image gallery"
         >
-          <img
-            src={activeImage.src}
-            alt={activeImage.alt}
-            className="max-h-[90vh] max-w-[90vw]"
-          />
+          <button
+            type="button"
+            className="absolute top-4 right-4 rounded-full bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/20"
+            onClick={() => setGalleryIndex(null)}
+            aria-label="Close gallery"
+          >
+            Close
+          </button>
+
+          <button
+            type="button"
+            className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 px-3 py-3 text-xl text-white hover:bg-white/20 sm:left-6"
+            onClick={(e) => {
+              e.stopPropagation()
+              setGalleryIndex(
+                (i) =>
+                  i == null ? i : (i - 1 + GALLERY.length) % GALLERY.length,
+              )
+            }}
+            aria-label="Previous image"
+          >
+            ‹
+          </button>
+
+          <figure
+            className="flex max-h-full max-w-full flex-col items-center gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={galleryImage.src}
+              alt={galleryImage.alt}
+              className="max-h-[80vh] max-w-[90vw] object-contain"
+            />
+            <figcaption className="text-center text-sm text-white/80">
+              {galleryImage.alt}
+              <span className="mt-1 block text-xs text-white/50">
+                {(galleryIndex ?? 0) + 1} / {GALLERY.length}
+              </span>
+            </figcaption>
+          </figure>
+
+          <button
+            type="button"
+            className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 px-3 py-3 text-xl text-white hover:bg-white/20 sm:right-6"
+            onClick={(e) => {
+              e.stopPropagation()
+              setGalleryIndex(
+                (i) => (i == null ? i : (i + 1) % GALLERY.length),
+              )
+            }}
+            aria-label="Next image"
+          >
+            ›
+          </button>
         </div>
       ) : null}
     </div>
