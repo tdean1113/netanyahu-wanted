@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+.tools/
+dist/
+web/dist/
+api/dist/
+
+# Env
+.env
+.env.local
+web/.env
+api/.env
+
+# Logs / OS
+*.log
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Excel lock files
+~$*
