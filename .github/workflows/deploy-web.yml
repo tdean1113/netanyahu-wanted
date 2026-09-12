@@ -35,7 +35,8 @@ jobs:
         env:
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
           VITE_SQUARE_LIVE: ${{ vars.VITE_SQUARE_LIVE }}
-          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH }}
+          # Custom domain serves from site root (not /netanyahu-wanted/)
+          VITE_BASE_PATH: '/'
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web/dist
