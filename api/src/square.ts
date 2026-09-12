@@ -143,7 +143,7 @@ export async function createCheckoutLink(input: {
   parseAndValidateDonations(quantity, donations)
 
   if (config.mockMode) {
-    const url = new URL('/success', config.frontendBaseUrl)
+    const url = new URL(config.frontendUrl('/success'))
     url.searchParams.set('mock', '1')
     url.searchParams.set('qty', String(quantity))
     url.searchParams.set('donations', JSON.stringify(donations))
@@ -213,7 +213,7 @@ export async function createCheckoutLink(input: {
       },
     },
     checkoutOptions: {
-      redirectUrl: new URL('/success', config.frontendBaseUrl).toString(),
+      redirectUrl: config.frontendUrl('/success'),
       askForShippingAddress: true,
       allowTipping: false,
     },

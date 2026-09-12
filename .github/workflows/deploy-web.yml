@@ -37,6 +37,8 @@ jobs:
           VITE_SQUARE_LIVE: ${{ vars.VITE_SQUARE_LIVE }}
           # Custom domain serves from site root (not /netanyahu-wanted/)
           VITE_BASE_PATH: '/'
+      # GitHub Pages has no SPA fallback — serve index.html for unknown paths
+      - run: cp dist/index.html dist/404.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web/dist

@@ -53,6 +53,12 @@ export const config = {
     .map((s) => s.trim())
     .filter(Boolean),
   frontendBaseUrl: required('FRONTEND_BASE_URL', 'http://localhost:5173'),
+  /** Join a path onto FRONTEND_BASE_URL without dropping any base path segment. */
+  frontendUrl(path: string): string {
+    const base = this.frontendBaseUrl.replace(/\/$/, '')
+    const suffix = path.startsWith('/') ? path : `/${path}`
+    return `${base}${suffix}`
+  },
   square: {
     accessToken: required('SQUARE_ACCESS_TOKEN'),
     locationId: required('SQUARE_LOCATION_ID'),
