@@ -380,7 +380,7 @@ export default function Shop() {
                   Donation recipient for each medal
                 </div>
                 <div className="mb-3 text-sm text-muted">
-                  Required — {formatAud(DONATION_PER_MEDAL_AUD)} from each medal
+                  Required — {formatAud(DONATION_PER_MEDAL_AUD)} from each medal sold
                   goes to the organisation you select
                 </div>
 
