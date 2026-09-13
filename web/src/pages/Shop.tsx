@@ -381,7 +381,7 @@ export default function Shop() {
                 </div>
                 <div className="mb-3 text-sm text-muted">
                   Required — {formatAud(DONATION_PER_MEDAL_AUD)} from each medal sold
-                  goes to the organisation you select
+                  goes to the organisation that you select from below.
                 </div>
 
                 <div className="mb-4 space-y-2">
