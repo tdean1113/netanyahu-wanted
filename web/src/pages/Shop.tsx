@@ -522,7 +522,7 @@ export default function Shop() {
                 {busy
                   ? 'Redirecting to secure checkout…'
                   : !allSelected
-                    ? 'Select a recipient for each medal'
+                    ? 'Select a donation recipient for each medal purchased'
                     : checkoutLive
                       ? `Buy now — ${formatAud(orderTotal)}`
                       : `Testing Purchase Only — ${formatAud(orderTotal)}`}
