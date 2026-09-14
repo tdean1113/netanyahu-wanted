@@ -194,6 +194,7 @@ export async function createCheckoutLink(input: {
       redirectUrl: config.frontendUrl('/success'),
       askForShippingAddress: true,
       allowTipping: false,
+      enableCoupon: false,
     },
     paymentNote: `donations=${JSON.stringify(donations)};qty=${quantity}`,
   })
