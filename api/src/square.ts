@@ -163,27 +163,6 @@ export async function createCheckoutLink(input: {
     )
   }
 
-  const donationLineItems = ORG_IDS.filter((id) => (donations[id] ?? 0) > 0).map(
-    (orgId) => {
-      const count = donations[orgId]!
-      const orgMeta = DONATION_ORGS[orgId]
-      const variationId = config.square.donationVariationIds[orgId]
-      if (!variationId) {
-        throw new Error(`Missing donation catalog variation for ${orgId}`)
-      }
-      return {
-        name: `Donation — ${orgMeta.name}`,
-        quantity: String(count),
-        catalogObjectId: variationId,
-        basePriceMoney: {
-          amount: BigInt(HALF_PRICE_CENTS),
-          currency: 'AUD' as const,
-        },
-        note: `Buyer-selected donation recipient: ${orgMeta.registerLabel} × ${count}`,
-      }
-    },
-  )
-
   const summary = splitSummaryLabel(donations)
   const response = await getClient().checkout.paymentLinks.create({
     idempotencyKey: randomUUID(),
@@ -196,12 +175,11 @@ export async function createCheckoutLink(input: {
           quantity: String(quantity),
           catalogObjectId: config.square.medalVariationId,
           basePriceMoney: {
-            amount: BigInt(HALF_PRICE_CENTS),
+            amount: BigInt(UNIT_PRICE_CENTS),
             currency: 'AUD',
           },
-          note: `Production / GST / postage. Edition of ${EDITION_SIZE}.`,
+          note: `Includes A$140 production/postage and A$140 donation (${summary}). Edition of ${EDITION_SIZE}.`,
         },
-        ...donationLineItems,
       ],
       metadata: {
         donation_split: JSON.stringify(donations),
