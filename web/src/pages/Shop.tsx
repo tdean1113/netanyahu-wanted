@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import SiteFooter from '../components/SiteFooter'
-import { createCheckout, getInventory } from '../lib/api'
+import {
+  createCheckout,
+  getInventory,
+  isRestrictedInAppBrowser,
+  startCheckoutViaNavigation,
+} from '../lib/api'
 import {
   DONATION_ORGS,
   DONATION_PER_MEDAL_AUD,
@@ -68,6 +74,7 @@ function recipientsToDonations(
 }
 
 export default function Shop() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null)
   const [qty, setQty] = useState(1)
   const [recipients, setRecipients] = useState<Array<DonationOrgId | null>>([
@@ -85,6 +92,16 @@ export default function Shop() {
   useEffect(() => {
     document.title = 'ICC Arrest Warrant Medal — A$280 with A$140 Donation'
   }, [])
+
+  useEffect(() => {
+    const checkoutError = searchParams.get('checkoutError')
+    if (!checkoutError) return
+    setError(checkoutError)
+    setBusy(false)
+    const next = new URLSearchParams(searchParams)
+    next.delete('checkoutError')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
 
   useEffect(() => {
     getInventory()
@@ -179,19 +196,30 @@ export default function Shop() {
     }
     setError(null)
     setBusy(true)
+    const payload: Partial<Record<DonationOrgId, number>> = {}
+    for (const org of DONATION_ORGS) {
+      if (donations[org.id] > 0) payload[org.id] = donations[org.id]
+    }
+
+    // Instagram / Facebook in-app browsers often block cross-origin fetch ("Load failed").
+    // Use a top-level form POST → redirect instead.
+    if (isRestrictedInAppBrowser()) {
+      startCheckoutViaNavigation(qty, payload)
+      return
+    }
+
     try {
-      const payload: Partial<Record<DonationOrgId, number>> = {}
-      for (const org of DONATION_ORGS) {
-        if (donations[org.id] > 0) payload[org.id] = donations[org.id]
-      }
       const { url } = await createCheckout(qty, payload)
       window.location.href = url
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Checkout is unavailable right now.',
-      )
+      const message =
+        err instanceof Error ? err.message : 'Checkout is unavailable right now.'
+      // Fallback for other WebViews that fail fetch the same way
+      if (/load failed|failed to fetch|networkerror/i.test(message)) {
+        startCheckoutViaNavigation(qty, payload)
+        return
+      }
+      setError(message)
       setBusy(false)
     }
   }

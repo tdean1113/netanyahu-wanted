@@ -65,6 +65,38 @@ export function createCheckout(
   })
 }
 
+/** Top-level navigation checkout — works in Instagram / in-app browsers where fetch fails. */
+export function startCheckoutViaNavigation(
+  quantity: number,
+  donations: Partial<Record<DonationOrgId, number>>,
+) {
+  const form = document.createElement('form')
+  form.method = 'POST'
+  form.action = `${API_BASE}/api/checkout/start`
+  form.style.display = 'none'
+
+  const qty = document.createElement('input')
+  qty.type = 'hidden'
+  qty.name = 'quantity'
+  qty.value = String(quantity)
+  form.appendChild(qty)
+
+  const donationsField = document.createElement('input')
+  donationsField.type = 'hidden'
+  donationsField.name = 'donations'
+  donationsField.value = JSON.stringify(donations)
+  form.appendChild(donationsField)
+
+  document.body.appendChild(form)
+  form.submit()
+}
+
+export function isRestrictedInAppBrowser() {
+  const ua = navigator.userAgent || ''
+  return /Instagram|FBAN|FBAV|Line\//i.test(ua)
+}
+
+
 export function adminLogin(password: string) {
   return request<{ token: string }>('/api/admin/login', {
     method: 'POST',

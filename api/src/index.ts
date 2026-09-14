@@ -45,6 +45,7 @@ app.use(
     },
   }),
 )
+app.use(express.urlencoded({ extended: false, limit: '100kb' }))
 
 app.get('/health', (_req, res) => {
   res.json({
@@ -67,37 +68,68 @@ app.get('/api/inventory', async (_req, res) => {
   }
 })
 
+function parseCheckoutInput(body: {
+  quantity?: unknown
+  donations?: unknown
+  donationOrg?: unknown
+}): { quantity: number; donations: ReturnType<typeof parseAndValidateDonations> } {
+  const quantity = Number(body?.quantity)
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_QTY) {
+    throw new Error(`Quantity must be an integer from 1 to ${MAX_QTY}`)
+  }
+
+  let donations: unknown = body?.donations
+  if (typeof donations === 'string') {
+    try {
+      donations = JSON.parse(donations)
+    } catch {
+      throw new Error('Invalid donation selection')
+    }
+  }
+  if ((!donations || typeof donations !== 'object') && body?.donationOrg) {
+    const org = String(body.donationOrg)
+    if (!isDonationOrgId(org)) {
+      throw new Error('Please choose a donation recipient')
+    }
+    donations = { [org]: quantity }
+  }
+
+  return {
+    quantity,
+    donations: parseAndValidateDonations(quantity, donations),
+  }
+}
+
 app.post('/api/checkout', async (req, res) => {
   try {
-    const quantity = Number(req.body?.quantity)
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_QTY) {
-      res.status(400).json({
-        error: `Quantity must be an integer from 1 to ${MAX_QTY}`,
-      })
-      return
-    }
-
-    // Prefer donations map; accept legacy single donationOrg
-    let donations = req.body?.donations
-    if ((!donations || typeof donations !== 'object') && req.body?.donationOrg) {
-      const org = String(req.body.donationOrg)
-      if (!isDonationOrgId(org)) {
-        res.status(400).json({ error: 'Please choose a donation recipient' })
-        return
-      }
-      donations = { [org]: quantity }
-    }
-
-    const { url } = await createCheckoutLink({
-      quantity,
-      donations: parseAndValidateDonations(quantity, donations),
-    })
+    const input = parseCheckoutInput(req.body ?? {})
+    const { url } = await createCheckoutLink(input)
     res.json({ url })
   } catch (err) {
     console.error(err)
     res.status(400).json({
       error: err instanceof Error ? err.message : 'Checkout failed',
     })
+  }
+})
+
+/**
+ * Full-page form POST → redirect to Square.
+ * Needed for Instagram / in-app browsers that block cross-origin fetch ("Load failed").
+ */
+app.post('/api/checkout/start', async (req, res) => {
+  try {
+    const input = parseCheckoutInput(req.body ?? {})
+    const { url } = await createCheckoutLink(input)
+    res.redirect(303, url)
+  } catch (err) {
+    console.error(err)
+    const message =
+      err instanceof Error ? err.message : 'Checkout failed'
+    res.redirect(
+      303,
+      config.frontendUrl(`/shop?checkoutError=${encodeURIComponent(message)}`),
+    )
   }
 })
 
@@ -137,6 +169,14 @@ app.post('/api/orders/:orderId/send-confirmation', async (req, res) => {
       error: err instanceof Error ? err.message : 'Confirmation email failed',
     })
   }
+})
+
+app.get('/api/webhooks/square', (_req, res) => {
+  res.status(200).json({
+    ok: true,
+    message:
+      'Square webhook endpoint is live. Use this URL in the Square Developer Console (POST events only).',
+  })
 })
 
 app.post('/api/webhooks/square', async (req, res) => {
