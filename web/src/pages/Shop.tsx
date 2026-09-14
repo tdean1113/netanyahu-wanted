@@ -496,7 +496,7 @@ export default function Shop() {
                   }`}
                 >
                   {allSelected
-                    ? `Recipient selected for every medal${splitSummary ? ` · ${splitSummary}` : ''}`
+                    ? `Donation Recipient selected for every medal${splitSummary ? ` · ${splitSummary}` : ''}`
                     : 'Select a donation recipient for each medal'}
                 </p>
               </div>
