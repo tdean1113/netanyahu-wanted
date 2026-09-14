@@ -82,3 +82,10 @@ export function getExportUrl(token: string) {
   const base = import.meta.env.VITE_API_BASE_URL ?? ''
   return `${base}/api/admin/export?token=${encodeURIComponent(token)}`
 }
+
+export function sendOrderConfirmation(orderId: string) {
+  return request<{ sent: boolean; reason?: string }>(
+    `/api/orders/${encodeURIComponent(orderId)}/send-confirmation`,
+    { method: 'POST' },
+  )
+}

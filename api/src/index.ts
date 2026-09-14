@@ -1,5 +1,6 @@
 import cors from 'cors'
 import express from 'express'
+import { WebhooksHelper } from 'square'
 import {
   getBearerToken,
   issueAdminToken,
@@ -9,13 +10,16 @@ import {
   MAX_QTY,
   config,
 } from './config.js'
+import { isEmailConfigured } from './email.js'
 import { buildRegisterWorkbook } from './exportRegister.js'
 import {
   createCheckoutLink,
   getDonationSummary,
   getInventory,
+  getOrderConfirmationDetails,
   isDonationOrgId,
   parseAndValidateDonations,
+  sendOrderConfirmationIfNeeded,
 } from './square.js'
 
 const app = express()
@@ -30,13 +34,24 @@ app.use(
     },
   }),
 )
-app.use(express.json({ limit: '100kb' }))
+
+type RequestWithRawBody = express.Request & { rawBody?: string }
+
+app.use(
+  express.json({
+    limit: '100kb',
+    verify: (req, _res, buf) => {
+      ;(req as RequestWithRawBody).rawBody = buf.toString('utf8')
+    },
+  }),
+)
 
 app.get('/health', (_req, res) => {
   res.json({
     ok: true,
     mockMode: config.mockMode,
     environment: config.square.environment,
+    emailConfigured: isEmailConfigured(),
   })
 })
 
@@ -83,6 +98,92 @@ app.post('/api/checkout', async (req, res) => {
     res.status(400).json({
       error: err instanceof Error ? err.message : 'Checkout failed',
     })
+  }
+})
+
+app.get('/api/orders/:orderId/confirmation', async (req, res) => {
+  try {
+    const orderId = String(req.params.orderId ?? '')
+    if (!orderId) {
+      res.status(400).json({ error: 'Missing order id' })
+      return
+    }
+    const details = await getOrderConfirmationDetails(orderId)
+    if (!details) {
+      res.status(404).json({ error: 'Order not found' })
+      return
+    }
+    res.json(details)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({
+      error: err instanceof Error ? err.message : 'Order lookup failed',
+    })
+  }
+})
+
+app.post('/api/orders/:orderId/send-confirmation', async (req, res) => {
+  try {
+    const orderId = String(req.params.orderId ?? '')
+    if (!orderId) {
+      res.status(400).json({ error: 'Missing order id' })
+      return
+    }
+    const result = await sendOrderConfirmationIfNeeded(orderId)
+    res.json(result)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({
+      error: err instanceof Error ? err.message : 'Confirmation email failed',
+    })
+  }
+})
+
+app.post('/api/webhooks/square', async (req, res) => {
+  try {
+    const signature = String(
+      req.header('x-square-hmacsha256-signature') ?? '',
+    )
+    const rawBody = (req as RequestWithRawBody).rawBody ?? ''
+
+    if (!config.square.webhookSignatureKey) {
+      console.error('SQUARE_WEBHOOK_SIGNATURE_KEY is not set')
+      res.status(503).json({ error: 'Webhook not configured' })
+      return
+    }
+
+    const valid = await WebhooksHelper.verifySignature({
+      requestBody: rawBody,
+      signatureHeader: signature,
+      signatureKey: config.square.webhookSignatureKey,
+      notificationUrl: config.square.webhookNotificationUrl,
+    })
+    if (!valid) {
+      res.status(403).json({ error: 'Invalid signature' })
+      return
+    }
+
+    const event = req.body as {
+      type?: string
+      data?: { object?: { payment?: { status?: string; orderId?: string } } }
+    }
+    const type = event.type ?? ''
+    const payment = event.data?.object?.payment
+    const orderId = payment?.orderId
+
+    if (
+      (type === 'payment.updated' || type === 'payment.created') &&
+      payment?.status === 'COMPLETED' &&
+      orderId
+    ) {
+      const result = await sendOrderConfirmationIfNeeded(orderId)
+      console.log('Order confirmation email', { orderId, ...result })
+    }
+
+    res.status(200).json({ ok: true })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ ok: false })
   }
 })
 
@@ -146,6 +247,6 @@ app.get('/api/admin/export', async (req, res) => {
 
 app.listen(config.port, () => {
   console.log(
-    `Medal API listening on :${config.port} (mockMode=${config.mockMode})`,
+    `Medal API listening on :${config.port} (mockMode=${config.mockMode}, emailConfigured=${isEmailConfigured()})`,
   )
 })

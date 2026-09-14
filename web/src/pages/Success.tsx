@@ -1,10 +1,21 @@
 import { useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import { sendOrderConfirmation } from '../lib/api'
 
 export default function Success() {
+  const [params] = useSearchParams()
+
   useEffect(() => {
     document.title = 'Order Confirmed — ICC Arrest Warrant Medal'
   }, [])
+
+  useEffect(() => {
+    const orderId = params.get('orderId') ?? params.get('order_id')
+    if (!orderId) return
+    void sendOrderConfirmation(orderId).catch((err) => {
+      console.warn('Confirmation email trigger failed', err)
+    })
+  }, [params])
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-white px-6 py-16">
@@ -12,6 +23,8 @@ export default function Success() {
         <h1 className="mb-4 text-4xl font-semibold text-ink">Thank you</h1>
         <p className="mb-8 text-lg leading-relaxed text-muted">
           Your order for the ICC Arrest Warrant Issued medal has been received.
+          A confirmation email with your contact details and delivery address
+          will be sent to the address you provided at checkout.
         </p>
         <Link to="/shop" className="text-link hover:underline">
           Back to the medal

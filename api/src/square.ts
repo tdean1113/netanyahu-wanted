@@ -195,6 +195,7 @@ export async function createCheckoutLink(input: {
       askForShippingAddress: true,
       allowTipping: false,
       enableCoupon: false,
+      merchantSupportEmail: config.merchant.supportEmail,
     },
     paymentNote: `donations=${JSON.stringify(donations)};qty=${quantity}`,
   })
@@ -274,6 +275,161 @@ function buyerNameFromOrder(order: {
     if (name) return name
   }
   return ''
+}
+
+export interface OrderConfirmationDetails {
+  orderId: string
+  quantity: number
+  donationSummary: string
+  totalCents: number
+  buyerName: string
+  buyerEmail: string
+  buyerPhone: string
+  deliveryAddress: {
+    addressLine1?: string | null
+    addressLine2?: string | null
+    addressLine3?: string | null
+    locality?: string | null
+    administrativeDistrictLevel1?: string | null
+    postalCode?: string | null
+    country?: string | null
+  } | null
+  receiptUrl: string
+}
+
+const confirmationEmailSent = new Set<string>()
+
+export function wasConfirmationEmailSent(orderId: string): boolean {
+  return confirmationEmailSent.has(orderId)
+}
+
+export function markConfirmationEmailSent(orderId: string): void {
+  confirmationEmailSent.add(orderId)
+}
+
+function recipientFromOrder(order: {
+  fulfillments?: Array<{
+    shipmentDetails?: {
+      recipient?: {
+        displayName?: string | null
+        emailAddress?: string | null
+        phoneNumber?: string | null
+        address?: {
+          addressLine1?: string | null
+          addressLine2?: string | null
+          addressLine3?: string | null
+          locality?: string | null
+          administrativeDistrictLevel1?: string | null
+          postalCode?: string | null
+          country?: string | null
+        } | null
+      } | null
+    } | null
+  }> | null
+}) {
+  for (const f of order.fulfillments ?? []) {
+    const recipient = f.shipmentDetails?.recipient
+    if (recipient) return recipient
+  }
+  return null
+}
+
+export async function getOrderConfirmationDetails(
+  orderId: string,
+): Promise<OrderConfirmationDetails | null> {
+  if (config.mockMode) return null
+
+  const response = await getClient().orders.get({ orderId })
+  const order = response.order
+  if (!order?.id) return null
+
+  const looksLikeMedal =
+    order.metadata?.product === 'icc-arrest-warrant-medal' ||
+    (order.lineItems ?? []).some((li) =>
+      (li.name ?? '').toLowerCase().includes('arrest warrant medal'),
+    )
+  if (!looksLikeMedal) return null
+
+  if (order.state !== 'COMPLETED' && order.state !== 'OPEN') {
+    // Payment-link orders often move OPEN → COMPLETED; allow both once paid.
+    // Unpaid drafts are DRAFT.
+  }
+  if (order.state === 'DRAFT' || order.state === 'CANCELED') return null
+
+  const donations = parseDonationsFromOrder({
+    metadata: order.metadata ?? null,
+    lineItems: order.lineItems ?? null,
+  })
+  const medalOrgs = donations ? expandMedalOrgs(donations) : []
+  const quantity =
+    Number(order.metadata?.medal_qty ?? 0) ||
+    medalOrgs.length ||
+    Number(
+      (order.lineItems ?? []).find((li) =>
+        (li.name ?? '').toLowerCase().includes('arrest warrant medal'),
+      )?.quantity ?? 0,
+    )
+
+  const recipient = recipientFromOrder(order)
+  let receiptUrl = ''
+
+  const tenderIds = (order.tenders ?? [])
+    .map((t) => t.paymentId)
+    .filter((id): id is string => Boolean(id))
+  for (const paymentId of tenderIds) {
+    try {
+      const payment = await getClient().payments.get({ paymentId })
+      if (payment.payment?.receiptUrl) {
+        receiptUrl = payment.payment.receiptUrl
+        break
+      }
+    } catch {
+      /* ignore missing payment */
+    }
+  }
+
+  return {
+    orderId: order.id,
+    quantity: quantity || 1,
+    donationSummary: donations ? splitSummaryLabel(donations) : '',
+    totalCents: Number(order.totalMoney?.amount ?? UNIT_PRICE_CENTS),
+    buyerName: recipient?.displayName?.trim() || buyerNameFromOrder(order),
+    buyerEmail: recipient?.emailAddress?.trim() || '',
+    buyerPhone: recipient?.phoneNumber?.trim() || '',
+    deliveryAddress: recipient?.address
+      ? {
+          addressLine1: recipient.address.addressLine1,
+          addressLine2: recipient.address.addressLine2,
+          addressLine3: recipient.address.addressLine3,
+          locality: recipient.address.locality,
+          administrativeDistrictLevel1:
+            recipient.address.administrativeDistrictLevel1,
+          postalCode: recipient.address.postalCode,
+          country: recipient.address.country ?? null,
+        }
+      : null,
+    receiptUrl,
+  }
+}
+
+export async function sendOrderConfirmationIfNeeded(
+  orderId: string,
+): Promise<{ sent: boolean; reason?: string }> {
+  if (wasConfirmationEmailSent(orderId)) {
+    return { sent: false, reason: 'already_sent' }
+  }
+
+  const details = await getOrderConfirmationDetails(orderId)
+  if (!details) {
+    return { sent: false, reason: 'order_not_found_or_not_medal' }
+  }
+
+  const { sendBuyerOrderConfirmation } = await import('./email.js')
+  const result = await sendBuyerOrderConfirmation(details)
+  if (result.sent) {
+    markConfirmationEmailSent(orderId)
+  }
+  return result
 }
 
 export async function listPaidMedalOrders(): Promise<PaidMedalOrder[]> {

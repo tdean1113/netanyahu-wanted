@@ -73,6 +73,33 @@ export const config = {
       para: required('SQUARE_DONATION_PARA_VARIATION_ID'),
       panzma: required('SQUARE_DONATION_PANZMA_VARIATION_ID'),
     } as Record<DonationOrgId, string>,
+    webhookSignatureKey: required('SQUARE_WEBHOOK_SIGNATURE_KEY'),
+    webhookNotificationUrl: required(
+      'SQUARE_WEBHOOK_NOTIFICATION_URL',
+      'https://mam-medal-api-151658014953.australia-southeast1.run.app/api/webhooks/square',
+    ),
+  },
+  merchant: {
+    supportEmail: required(
+      'MERCHANT_SUPPORT_EMAIL',
+      'info@netanyahuwanted.com',
+    ),
+    name: required('MERCHANT_NAME', 'Medal Art Mint'),
+  },
+  email: {
+    from: required(
+      'EMAIL_FROM',
+      'Medal Art Mint <info@netanyahuwanted.com>',
+    ),
+    /** Optional BCC so you also get a copy of each buyer confirmation. */
+    bcc: required('EMAIL_BCC', 'tdean1113@gmail.com'),
+    resendApiKey: required('RESEND_API_KEY'),
+    smtp: {
+      host: required('SMTP_HOST'),
+      port: Number(process.env.SMTP_PORT ?? 587),
+      user: required('SMTP_USER'),
+      pass: required('SMTP_PASS'),
+    },
   },
   mockMode: process.env.MOCK_SQUARE === '1' || !process.env.SQUARE_ACCESS_TOKEN,
 }
