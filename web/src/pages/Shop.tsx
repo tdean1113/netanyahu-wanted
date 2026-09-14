@@ -558,7 +558,7 @@ export default function Shop() {
 
               <p className="text-center text-xs text-muted">
                 {checkoutLive
-                  ? 'Secure payment by Square. Your donation choices are recorded with your order.'
+                  ? 'Secure payment by Square. Apple Pay and Google Pay appear at the top of checkout — Credit Card Payment below. Your donation choices are recorded with your order.'
                   : 'Sandbox / test mode — set VITE_SQUARE_LIVE=true when your production Square key is ready. Donation choices are still recorded.'}
               </p>
             </div>
