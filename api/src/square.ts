@@ -196,6 +196,14 @@ export async function createCheckoutLink(input: {
       allowTipping: false,
       enableCoupon: false,
       merchantSupportEmail: config.merchant.supportEmail,
+      // Hosted checkout puts wallets above the card form; disable them so
+      // card entry is the clear, visible payment method without scrolling past wallets.
+      acceptedPaymentMethods: {
+        applePay: false,
+        googlePay: false,
+        cashAppPay: false,
+        afterpayClearpay: false,
+      },
     },
     paymentNote: `donations=${JSON.stringify(donations)};qty=${quantity}`,
   })
