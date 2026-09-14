@@ -341,7 +341,8 @@ export default function Shop() {
                   {formatAud(UNIT_PRICE_AUD)}
                 </div>
                 <div className="text-sm text-muted">
-                  incl. {formatAud(DONATION_PER_MEDAL_AUD)} donation
+                  incl. {formatAud(DONATION_PER_MEDAL_AUD)} donation · free
+                  postage
                 </div>
               </div>
 
