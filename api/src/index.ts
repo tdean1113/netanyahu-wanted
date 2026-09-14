@@ -30,7 +30,8 @@ app.use(
         callback(null, true)
         return
       }
-      callback(new Error(`CORS blocked for origin ${origin}`))
+      // Do not throw — that becomes a 500 for form POSTs (e.g. Instagram checkout).
+      callback(null, false)
     },
   }),
 )

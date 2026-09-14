@@ -51,7 +51,17 @@ export const config = {
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173')
     .split(',')
     .map((s) => s.trim())
-    .filter(Boolean),
+    .filter(Boolean)
+    .flatMap((origin) => {
+      // Always accept both http and https for the same host (Instagram often opens http).
+      if (origin.startsWith('https://')) {
+        return [origin, `http://${origin.slice('https://'.length)}`]
+      }
+      if (origin.startsWith('http://')) {
+        return [origin, `https://${origin.slice('http://'.length)}`]
+      }
+      return [origin]
+    }),
   frontendBaseUrl: required('FRONTEND_BASE_URL', 'http://localhost:5173'),
   /** Join a path onto FRONTEND_BASE_URL without dropping any base path segment. */
   frontendUrl(path: string): string {
