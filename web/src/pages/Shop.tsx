@@ -361,7 +361,7 @@ export default function Shop() {
               <div>
                 <div className="mb-2 flex justify-between text-sm">
                   <span>
-                    {sold} of {EDITION_SIZE} sold
+                    {sold} of {EDITION_SIZE} allocated
                   </span>
                   <span>{remaining} remaining</span>
                 </div>
