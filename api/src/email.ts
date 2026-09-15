@@ -49,7 +49,6 @@ function buildBodies(details: OrderConfirmationDetails): {
     'Your contact details',
     details.buyerName ? `Name: ${details.buyerName}` : '',
     details.buyerEmail ? `Email: ${details.buyerEmail}` : '',
-    details.buyerPhone ? `Phone: ${details.buyerPhone}` : '',
     '',
     'Delivery address',
     ...(addressLines.length ? addressLines : ['(No delivery address on file)']),
@@ -78,8 +77,7 @@ function buildBodies(details: OrderConfirmationDetails): {
       <h2 style="font-size: 1.1rem; margin-bottom: 0.35rem;">Your contact details</h2>
       <p style="margin-top: 0;">
         ${details.buyerName ? `Name: ${escapeHtml(details.buyerName)}<br/>` : ''}
-        ${details.buyerEmail ? `Email: ${escapeHtml(details.buyerEmail)}<br/>` : ''}
-        ${details.buyerPhone ? `Phone: ${escapeHtml(details.buyerPhone)}` : ''}
+        ${details.buyerEmail ? `Email: ${escapeHtml(details.buyerEmail)}` : ''}
       </p>
       <h2 style="font-size: 1.1rem; margin-bottom: 0.35rem;">Delivery address</h2>
       <p style="margin-top: 0;">
