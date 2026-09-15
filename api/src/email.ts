@@ -30,7 +30,16 @@ function formatAddressLines(details: OrderConfirmationDetails): string[] {
   ].filter((line): line is string => Boolean(line && line.trim()))
 }
 
-function buildBodies(details: OrderConfirmationDetails): {
+function merchantNotifyTo(): string {
+  return (
+    config.email.bcc ||
+    config.merchant.supportEmail ||
+    config.email.smtp.user ||
+    ''
+  )
+}
+
+function buildBuyerBodies(details: OrderConfirmationDetails): {
   text: string
   html: string
 } {
@@ -44,7 +53,9 @@ function buildBodies(details: OrderConfirmationDetails): {
     '',
     `Order: ${details.quantity} × ICC Arrest Warrant Medal`,
     `Total paid: ${total}`,
-    details.donationSummary ? `Donation recipient(s): ${details.donationSummary}` : '',
+    details.donationSummary
+      ? `Donation recipient(s): ${details.donationSummary}`
+      : '',
     '',
     'Your contact details',
     details.buyerName ? `Name: ${details.buyerName}` : '',
@@ -100,7 +111,75 @@ function buildBodies(details: OrderConfirmationDetails): {
   return { text, html }
 }
 
-async function sendViaResend(to: string, subject: string, text: string, html: string) {
+function buildMerchantBodies(details: OrderConfirmationDetails): {
+  text: string
+  html: string
+} {
+  const addressLines = formatAddressLines(details)
+  const total = `A$${(details.totalCents / 100).toFixed(2)}`
+  const shipName = details.buyerName || 'Buyer'
+
+  const text = [
+    `New medal order — please ship.`,
+    '',
+    `Order ID: ${details.orderId}`,
+    `Item: ${details.quantity} × ICC Arrest Warrant Medal`,
+    `Total paid: ${total}`,
+    details.donationSummary
+      ? `Donation recipient(s): ${details.donationSummary}`
+      : '',
+    '',
+    'Ship to',
+    `Name: ${shipName}`,
+    details.buyerEmail ? `Email: ${details.buyerEmail}` : '',
+    ...(addressLines.length ? addressLines : ['(No delivery address on file)']),
+    '',
+    details.receiptUrl ? `Square receipt: ${details.receiptUrl}` : '',
+  ]
+    .filter((line) => line !== '')
+    .join('\n')
+
+  const html = `
+    <div style="font-family: Georgia, serif; color: #1a1a1a; line-height: 1.5; max-width: 560px;">
+      <p><strong>New medal order — please ship.</strong></p>
+      <p>
+        <strong>Order ID:</strong> ${escapeHtml(details.orderId)}<br/>
+        <strong>Item:</strong> ${details.quantity} × ICC Arrest Warrant Medal<br/>
+        <strong>Total paid:</strong> ${escapeHtml(total)}
+        ${
+          details.donationSummary
+            ? `<br/><strong>Donation recipient(s):</strong> ${escapeHtml(details.donationSummary)}`
+            : ''
+        }
+      </p>
+      <h2 style="font-size: 1.1rem; margin-bottom: 0.35rem;">Ship to</h2>
+      <p style="margin-top: 0;">
+        Name: ${escapeHtml(shipName)}<br/>
+        ${details.buyerEmail ? `Email: ${escapeHtml(details.buyerEmail)}<br/>` : ''}
+        ${
+          addressLines.length
+            ? addressLines.map(escapeHtml).join('<br/>')
+            : '(No delivery address on file)'
+        }
+      </p>
+      ${
+        details.receiptUrl
+          ? `<p><a href="${escapeHtml(details.receiptUrl)}">View Square payment receipt</a></p>`
+          : ''
+      }
+    </div>
+  `.trim()
+
+  return { text, html }
+}
+
+async function sendViaResend(opts: {
+  to: string
+  subject: string
+  text: string
+  html: string
+  bcc?: string
+}) {
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -109,11 +188,11 @@ async function sendViaResend(to: string, subject: string, text: string, html: st
     },
     body: JSON.stringify({
       from: config.email.from,
-      to: [to],
-      ...(config.email.bcc ? { bcc: [config.email.bcc] } : {}),
-      subject,
-      text,
-      html,
+      to: [opts.to],
+      ...(opts.bcc ? { bcc: [opts.bcc] } : {}),
+      subject: opts.subject,
+      text: opts.text,
+      html: opts.html,
     }),
   })
   if (!response.ok) {
@@ -122,7 +201,13 @@ async function sendViaResend(to: string, subject: string, text: string, html: st
   }
 }
 
-async function sendViaSmtp(to: string, subject: string, text: string, html: string) {
+async function sendViaSmtp(opts: {
+  to: string
+  subject: string
+  text: string
+  html: string
+  bcc?: string
+}) {
   const transporter = nodemailer.createTransport({
     host: config.email.smtp.host,
     port: config.email.smtp.port,
@@ -135,34 +220,65 @@ async function sendViaSmtp(to: string, subject: string, text: string, html: stri
 
   await transporter.sendMail({
     from: config.email.from,
-    to,
-    bcc: config.email.bcc || undefined,
-    subject,
-    text,
-    html,
+    to: opts.to,
+    bcc: opts.bcc || undefined,
+    subject: opts.subject,
+    text: opts.text,
+    html: opts.html,
   })
 }
 
+async function sendMail(opts: {
+  to: string
+  subject: string
+  text: string
+  html: string
+  bcc?: string
+}) {
+  if (config.email.resendApiKey) {
+    await sendViaResend(opts)
+  } else {
+    await sendViaSmtp(opts)
+  }
+}
+
+/** Buyer thank-you + merchant ship-to notice (address for fulfillment). */
 export async function sendBuyerOrderConfirmation(
   details: OrderConfirmationDetails,
 ): Promise<{ sent: boolean; reason?: string }> {
   if (!isEmailConfigured()) {
     return {
       sent: false,
-      reason: 'Email is not configured (set RESEND_API_KEY or SMTP_HOST/SMTP_USER/SMTP_PASS)',
+      reason:
+        'Email is not configured (set RESEND_API_KEY or SMTP_HOST/SMTP_USER/SMTP_PASS)',
     }
   }
-  if (!details.buyerEmail) {
-    return { sent: false, reason: 'Order has no buyer email' }
+
+  const merchantTo = merchantNotifyTo()
+  if (!merchantTo && !details.buyerEmail) {
+    return { sent: false, reason: 'No merchant or buyer email to notify' }
   }
 
-  const { text, html } = buildBodies(details)
-  const subject = `Order confirmation — ICC Arrest Warrant Medal`
+  // Merchant fulfillment email first — this is the address you need to ship.
+  if (merchantTo) {
+    const merchant = buildMerchantBodies(details)
+    const who = details.buyerName || 'buyer'
+    await sendMail({
+      to: merchantTo,
+      subject: `New medal order — ship to ${who}`,
+      text: merchant.text,
+      html: merchant.html,
+    })
+  }
 
-  if (config.email.resendApiKey) {
-    await sendViaResend(details.buyerEmail, subject, text, html)
-  } else {
-    await sendViaSmtp(details.buyerEmail, subject, text, html)
+  if (details.buyerEmail) {
+    const buyer = buildBuyerBodies(details)
+    await sendMail({
+      to: details.buyerEmail,
+      subject: `Order confirmation — ICC Arrest Warrant Medal`,
+      text: buyer.text,
+      html: buyer.html,
+    })
   }
 
   return { sent: true }
