@@ -188,6 +188,10 @@ export default function Shop() {
   }
 
   async function handleBuy() {
+    if (remaining <= 0) {
+      setError('Sold out')
+      return
+    }
     if (!allSelected) {
       setError(
         `Select a donation recipient for each medal (${missingCount} remaining).`,
@@ -545,16 +549,18 @@ export default function Shop() {
               <button
                 type="button"
                 onClick={handleBuy}
-                disabled={busy || !allSelected}
+                disabled={busy || remaining <= 0 || !allSelected}
                 className="w-full rounded-lg bg-navy py-3.5 font-semibold text-white hover:bg-ink disabled:opacity-70"
               >
-                {busy
-                  ? 'Redirecting to secure checkout…'
-                  : !allSelected
-                    ? 'Select a donation recipient for each medal purchased'
-                    : checkoutLive
-                      ? `Buy now — ${formatAud(orderTotal)}`
-                      : `Testing Purchase Only — ${formatAud(orderTotal)}`}
+                {remaining <= 0
+                  ? 'Sold out'
+                  : busy
+                    ? 'Redirecting to secure checkout…'
+                    : !allSelected
+                      ? 'Select a donation recipient for each medal purchased'
+                      : checkoutLive
+                        ? `Buy now — ${formatAud(orderTotal)}`
+                        : `Testing Purchase Only — ${formatAud(orderTotal)}`}
               </button>
 
               <p className="text-center text-xs text-muted">
