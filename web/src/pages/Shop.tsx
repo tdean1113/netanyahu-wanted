@@ -8,6 +8,11 @@ import {
   startCheckoutViaNavigation,
 } from '../lib/api'
 import {
+  applyProductJsonLd,
+  applySeo,
+  removeProductJsonLd,
+} from '../lib/seo'
+import {
   DONATION_ORGS,
   DONATION_PER_MEDAL_AUD,
   EDITION_SIZE,
@@ -90,8 +95,26 @@ export default function Shop() {
     galleryIndex == null ? null : GALLERY[galleryIndex] ?? null
 
   useEffect(() => {
-    document.title = 'ICC Arrest Warrant Medal — A$280 with A$140 Donation'
+    applySeo({
+      title: 'Buy ICC Arrest Warrant Medal — A$280 with A$140 Donation | Medal Art Mint',
+      description:
+        'Purchase the limited-edition ICC Arrest Warrant Issued medal. A$280 includes A$140 donation to a humanitarian organisation you choose, plus free postage. Edition of 1000 by Medal Art Mint.',
+      path: '/shop',
+      type: 'product',
+    })
+    return () => removeProductJsonLd()
   }, [])
+
+  useEffect(() => {
+    applyProductJsonLd({
+      name: 'ICC Arrest Warrant Issued Medal',
+      description:
+        'Limited-edition commemorative medal by Medal Art Mint. A$280 including A$140 donation and free postage. Edition of 1000.',
+      priceAud: UNIT_PRICE_AUD,
+      remaining,
+      editionSize: EDITION_SIZE,
+    })
+  }, [remaining])
 
   useEffect(() => {
     const checkoutError = searchParams.get('checkoutError')

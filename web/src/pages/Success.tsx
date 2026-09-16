@@ -1,12 +1,19 @@
 import { useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { sendOrderConfirmation } from '../lib/api'
+import { applySeo } from '../lib/seo'
 
 export default function Success() {
   const [params] = useSearchParams()
 
   useEffect(() => {
-    document.title = 'Order Confirmed — ICC Arrest Warrant Medal'
+    applySeo({
+      title: 'Order Confirmed — ICC Arrest Warrant Medal',
+      description:
+        'Thank you for your order of the ICC Arrest Warrant Issued medal.',
+      path: '/success',
+      noIndex: true,
+    })
   }, [])
 
   useEffect(() => {
