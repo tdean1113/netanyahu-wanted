@@ -62,6 +62,11 @@ export function applySeo({
   document.title = title
   upsertMeta('name', 'description', description)
   upsertMeta('name', 'robots', noIndex ? 'noindex, nofollow' : 'index, follow')
+  upsertMeta(
+    'name',
+    'google-site-verification',
+    'f_KQT4ZQaGUwCYVknSrCZxCYZOXKoe_7nJoCZi3M0X4',
+  )
   upsertLink('canonical', url)
 
   upsertMeta('property', 'og:site_name', SITE_NAME)
