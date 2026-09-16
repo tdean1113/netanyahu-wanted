@@ -15,11 +15,13 @@ export default function Landing() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-black px-6 py-12">
       <div className="w-full max-w-md text-center">
-        <img
-          src="/images/obverse.png"
-          alt="Bronze ICC Arrest Warrant Issued commemorative medal, obverse — Medal Art Mint Netanyahu Wanted edition"
-          className="mx-auto w-full max-w-sm rounded-md"
-        />
+        <Link to="/shop" className="block">
+          <img
+            src="/images/obverse.png"
+            alt="Bronze ICC Arrest Warrant Issued commemorative medal, obverse — Medal Art Mint Netanyahu Wanted edition"
+            className="mx-auto w-full max-w-sm rounded-md transition-opacity hover:opacity-90"
+          />
+        </Link>
         <h1
           className="mt-8 text-center text-2xl font-semibold tracking-wide md:text-3xl font-futura-black"
           style={{ color: '#a45d2f' }}
