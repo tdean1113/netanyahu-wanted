@@ -179,12 +179,16 @@ async function sendViaResend(opts: {
   text: string
   html: string
   bcc?: string
+  idempotencyKey?: string
 }) {
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${config.email.resendApiKey}`,
       'Content-Type': 'application/json',
+      ...(opts.idempotencyKey
+        ? { 'Idempotency-Key': opts.idempotencyKey }
+        : {}),
     },
     body: JSON.stringify({
       from: config.email.from,
@@ -195,6 +199,9 @@ async function sendViaResend(opts: {
       html: opts.html,
     }),
   })
+  if (response.status === 409) {
+    return
+  }
   if (!response.ok) {
     const body = await response.text()
     throw new Error(`Resend failed (${response.status}): ${body}`)
@@ -234,6 +241,7 @@ async function sendMail(opts: {
   text: string
   html: string
   bcc?: string
+  idempotencyKey?: string
 }) {
   if (config.email.resendApiKey) {
     await sendViaResend(opts)
@@ -268,6 +276,7 @@ export async function sendBuyerOrderConfirmation(
       subject: `New medal order — ship to ${who}`,
       text: merchant.text,
       html: merchant.html,
+      idempotencyKey: `medal-merchant-${details.orderId}`.slice(0, 256),
     })
   }
 
@@ -278,6 +287,7 @@ export async function sendBuyerOrderConfirmation(
       subject: `Order confirmation — ICC Arrest Warrant Medal`,
       text: buyer.text,
       html: buyer.html,
+      idempotencyKey: `medal-buyer-${details.orderId}`.slice(0, 256),
     })
   }
 

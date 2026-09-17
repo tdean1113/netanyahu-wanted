@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { SquareClient, SquareEnvironment } from 'square'
 import {
+  claimConfirmationLock,
+  releaseConfirmationLock,
+} from './confirmationLock.js'
+import {
   DONATION_ORGS,
   EDITION_SIZE,
   HALF_PRICE_CENTS,
@@ -297,15 +301,10 @@ export interface OrderConfirmationDetails {
   receiptUrl: string
 }
 
-const confirmationEmailSent = new Set<string>()
-
-export function wasConfirmationEmailSent(orderId: string): boolean {
-  return confirmationEmailSent.has(orderId)
-}
-
-export function markConfirmationEmailSent(orderId: string): void {
-  confirmationEmailSent.add(orderId)
-}
+const confirmationInFlight = new Map<
+  string,
+  Promise<{ sent: boolean; reason?: string }>
+>()
 
 function recipientFromOrder(order: {
   fulfillments?: Array<{
@@ -412,24 +411,49 @@ export async function getOrderConfirmationDetails(
   }
 }
 
-export async function sendOrderConfirmationIfNeeded(
+async function sendOrderConfirmationOnce(
   orderId: string,
 ): Promise<{ sent: boolean; reason?: string }> {
-  if (wasConfirmationEmailSent(orderId)) {
-    return { sent: false, reason: 'already_sent' }
-  }
-
   const details = await getOrderConfirmationDetails(orderId)
   if (!details) {
     return { sent: false, reason: 'order_not_found_or_not_medal' }
   }
 
-  const { sendBuyerOrderConfirmation } = await import('./email.js')
-  const result = await sendBuyerOrderConfirmation(details)
-  if (result.sent) {
-    markConfirmationEmailSent(orderId)
+  const claimed = await claimConfirmationLock(orderId)
+  if (!claimed) {
+    return { sent: false, reason: 'already_sent' }
   }
-  return result
+
+  try {
+    const { sendBuyerOrderConfirmation } = await import('./email.js')
+    const result = await sendBuyerOrderConfirmation(details)
+    if (!result.sent) {
+      await releaseConfirmationLock(orderId)
+    }
+    return result
+  } catch (err) {
+    await releaseConfirmationLock(orderId)
+    throw err
+  }
+}
+
+export async function sendOrderConfirmationIfNeeded(
+  orderId: string,
+): Promise<{ sent: boolean; reason?: string }> {
+  const pending = confirmationInFlight.get(orderId)
+  if (pending) {
+    await pending
+    return { sent: false, reason: 'already_sent' }
+  }
+
+  let work!: Promise<{ sent: boolean; reason?: string }>
+  work = sendOrderConfirmationOnce(orderId).finally(() => {
+    if (confirmationInFlight.get(orderId) === work) {
+      confirmationInFlight.delete(orderId)
+    }
+  })
+  confirmationInFlight.set(orderId, work)
+  return work
 }
 
 export async function listPaidMedalOrders(): Promise<PaidMedalOrder[]> {
