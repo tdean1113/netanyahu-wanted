@@ -5,6 +5,7 @@ RUN npm ci
 COPY tsconfig.json ./
 COPY src ./src
 COPY templates ./templates
+RUN mkdir -p templates
 RUN npm run build
 
 FROM node:22-alpine
