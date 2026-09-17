@@ -85,8 +85,8 @@ export default function Shop() {
   const [recipients, setRecipients] = useState<Array<DonationOrgId | null>>([
     null,
   ])
-  const [sold, setSold] = useState(0)
-  const [remaining, setRemaining] = useState(EDITION_SIZE)
+  const [sold, setSold] = useState<number | null>(null)
+  const [remaining, setRemaining] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const checkoutLive = import.meta.env.VITE_SQUARE_LIVE === 'true'
@@ -106,6 +106,7 @@ export default function Shop() {
   }, [])
 
   useEffect(() => {
+    if (remaining == null) return
     applyProductJsonLd({
       name: 'ICC Arrest Warrant Issued Medal',
       description:
@@ -133,7 +134,7 @@ export default function Shop() {
         setRemaining(data.remaining)
       })
       .catch(() => {
-        /* keep defaults when API offline */
+        /* Hide the tally until Square stock is known. */
       })
   }, [])
 
@@ -178,8 +179,9 @@ export default function Shop() {
   )
   const donationTotal = qty * DONATION_PER_MEDAL_AUD
   const orderTotal = qty * UNIT_PRICE_AUD
+  const soldOut = remaining != null && remaining <= 0
   const soldPct = useMemo(
-    () => Math.min(100, (sold / EDITION_SIZE) * 100),
+    () => (sold == null ? 0 : Math.min(100, (sold / EDITION_SIZE) * 100)),
     [sold],
   )
 
@@ -211,6 +213,7 @@ export default function Shop() {
   }
 
   async function handleBuy() {
+    if (remaining == null) return
     if (remaining <= 0) {
       setError('Sold out')
       return
@@ -382,18 +385,22 @@ export default function Shop() {
               </p>
 
               <div>
-                <div className="mb-2 flex justify-between text-sm">
-                  <span>
-                    {sold} of {EDITION_SIZE} allocated
-                  </span>
-                  <span>{remaining} remaining</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-line">
-                  <div
-                    className="h-full bg-navy transition-all"
-                    style={{ width: `${soldPct}%` }}
-                  />
-                </div>
+                {sold != null && remaining != null ? (
+                  <>
+                    <div className="mb-2 flex justify-between text-sm">
+                      <span>
+                        {sold} of {EDITION_SIZE} allocated
+                      </span>
+                      <span>{remaining} remaining</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-line">
+                      <div
+                        className="h-full bg-navy transition-all"
+                        style={{ width: `${soldPct}%` }}
+                      />
+                    </div>
+                  </>
+                ) : null}
                 <p className="mt-2 text-xs leading-5 text-muted">
                   The tally count does not reflect the serial-numbered medal that
                   you will receive. An actual serial number cannot be requested
@@ -572,10 +579,10 @@ export default function Shop() {
               <button
                 type="button"
                 onClick={handleBuy}
-                disabled={busy || remaining <= 0 || !allSelected}
+                disabled={busy || soldOut || !allSelected}
                 className="w-full rounded-lg bg-navy py-3.5 font-semibold text-white hover:bg-ink disabled:opacity-70"
               >
-                {remaining <= 0
+                {soldOut
                   ? 'Sold out'
                   : busy
                     ? 'Redirecting to secure checkout…'
