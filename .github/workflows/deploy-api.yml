@@ -29,12 +29,31 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
+      - name: Ensure Firestore lock store
+        run: |
+          PROJECT_ID="$(gcloud config get-value project)"
+          gcloud services enable firestore.googleapis.com --project "$PROJECT_ID"
+          gcloud firestore databases describe --database='(default)' --project "$PROJECT_ID" >/dev/null 2>&1 \
+            || gcloud firestore databases create --database='(default)' --location=australia-southeast1 --type=firestore-native --project "$PROJECT_ID"
+          PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+          RUNTIME_SA="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null || true)"
+          if [ -z "$RUNTIME_SA" ]; then
+            RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+          fi
+          gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+            --member="serviceAccount:${RUNTIME_SA}" \
+            --role="roles/datastore.user" \
+            --condition=None \
+            --quiet \
+            || echo "Could not grant roles/datastore.user to ${RUNTIME_SA}; grant it manually if confirmation locks fail."
+
       - name: Build and deploy
         working-directory: api
         run: |
+          PROJECT_ID="$(gcloud config get-value project)"
           gcloud run deploy "$SERVICE" \
             --source . \
             --region "$REGION" \
             --allow-unauthenticated \
-            --set-env-vars "^|^SQUARE_ENVIRONMENT=production|MOCK_SQUARE=0|FRONTEND_BASE_URL=https://netanyahuwanted.com|CORS_ORIGINS=https://netanyahuwanted.com,https://www.netanyahuwanted.com,https://tdean1113.github.io,http://localhost:5173" \
+            --set-env-vars "^|^SQUARE_ENVIRONMENT=production|MOCK_SQUARE=0|FRONTEND_BASE_URL=https://netanyahuwanted.com|CORS_ORIGINS=https://netanyahuwanted.com,https://www.netanyahuwanted.com,https://tdean1113.github.io,http://localhost:5173|GOOGLE_CLOUD_PROJECT=${PROJECT_ID}" \
             --set-secrets "SQUARE_ACCESS_TOKEN=SQUARE_ACCESS_TOKEN:latest,SQUARE_LOCATION_ID=SQUARE_LOCATION_ID:latest,ADMIN_PASSWORD=ADMIN_PASSWORD:latest,ADMIN_TOKEN_SECRET=ADMIN_TOKEN_SECRET:latest,SQUARE_MEDAL_VARIATION_ID=SQUARE_MEDAL_VARIATION_ID:latest,SQUARE_DONATION_APAN_VARIATION_ID=SQUARE_DONATION_APAN_VARIATION_ID:latest,SQUARE_DONATION_ACIJ_VARIATION_ID=SQUARE_DONATION_ACIJ_VARIATION_ID:latest,SQUARE_DONATION_OLIVE_KIDS_VARIATION_ID=SQUARE_DONATION_OLIVE_KIDS_VARIATION_ID:latest,SQUARE_DONATION_PARA_VARIATION_ID=SQUARE_DONATION_PARA_VARIATION_ID:latest,SQUARE_DONATION_PANZMA_VARIATION_ID=SQUARE_DONATION_PANZMA_VARIATION_ID:latest"
