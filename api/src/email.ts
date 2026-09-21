@@ -30,13 +30,24 @@ function formatAddressLines(details: OrderConfirmationDetails): string[] {
   ].filter((line): line is string => Boolean(line && line.trim()))
 }
 
-function merchantNotifyTo(): string {
-  return (
-    config.email.bcc ||
-    config.merchant.supportEmail ||
-    config.email.smtp.user ||
-    ''
+function parseEmailList(raw: string): string[] {
+  return raw
+    .split(/[,;]+/)
+    .map((value) => value.trim())
+    .filter((value) => value.includes('@'))
+}
+
+/** Always include the fulfilment inbox, plus EMAIL_BCC / support if set. */
+function merchantNotifyAddresses(): string[] {
+  const addresses = new Set<string>(
+    [
+      ...parseEmailList(config.email.bcc),
+      ...parseEmailList(config.merchant.supportEmail),
+      ...parseEmailList(config.email.smtp.user),
+      'netanyahuwanted@gmail.com',
+    ].map((value) => value.toLowerCase()),
   )
+  return [...addresses]
 }
 
 function buildBuyerBodies(details: OrderConfirmationDetails): {
@@ -192,8 +203,8 @@ async function sendViaResend(opts: {
     },
     body: JSON.stringify({
       from: config.email.from,
-      to: [opts.to],
-      ...(opts.bcc ? { bcc: [opts.bcc] } : {}),
+      to: parseEmailList(opts.to),
+      ...(opts.bcc ? { bcc: parseEmailList(opts.bcc) } : {}),
       subject: opts.subject,
       text: opts.text,
       html: opts.html,
@@ -253,6 +264,7 @@ async function sendMail(opts: {
 /** Buyer thank-you + merchant ship-to notice (address for fulfillment). */
 export async function sendBuyerOrderConfirmation(
   details: OrderConfirmationDetails,
+  opts?: { force?: boolean },
 ): Promise<{ sent: boolean; reason?: string }> {
   if (!isEmailConfigured()) {
     return {
@@ -262,21 +274,26 @@ export async function sendBuyerOrderConfirmation(
     }
   }
 
-  const merchantTo = merchantNotifyTo()
-  if (!merchantTo && !details.buyerEmail) {
+  const merchantTo = merchantNotifyAddresses()
+  if (merchantTo.length === 0 && !details.buyerEmail) {
     return { sent: false, reason: 'No merchant or buyer email to notify' }
   }
 
+  const idempotencySuffix = opts?.force ? `-${Date.now()}` : ''
+
   // Merchant fulfillment email first — this is the address you need to ship.
-  if (merchantTo) {
+  if (merchantTo.length > 0) {
     const merchant = buildMerchantBodies(details)
     const who = details.buyerName || 'buyer'
     await sendMail({
-      to: merchantTo,
+      to: merchantTo.join(','),
       subject: `New medal order — ship to ${who}`,
       text: merchant.text,
       html: merchant.html,
-      idempotencyKey: `medal-merchant-${details.orderId}`.slice(0, 256),
+      idempotencyKey: `medal-merchant-${details.orderId}${idempotencySuffix}`.slice(
+        0,
+        256,
+      ),
     })
   }
 
@@ -287,7 +304,10 @@ export async function sendBuyerOrderConfirmation(
       subject: `Order confirmation — ICC Arrest Warrant Medal`,
       text: buyer.text,
       html: buyer.html,
-      idempotencyKey: `medal-buyer-${details.orderId}`.slice(0, 256),
+      idempotencyKey: `medal-buyer-${details.orderId}${idempotencySuffix}`.slice(
+        0,
+        256,
+      ),
     })
   }
 

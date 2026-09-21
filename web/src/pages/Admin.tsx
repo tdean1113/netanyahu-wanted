@@ -3,6 +3,7 @@ import {
   adminLogin,
   getAdminSummary,
   getExportUrl,
+  resendAdminConfirmation,
   type AdminSummaryResponse,
 } from '../lib/api'
 import { formatAud } from '../lib/donations'
@@ -16,6 +17,10 @@ export default function Admin() {
   const [summary, setSummary] = useState<AdminSummaryResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [receiptNumber, setReceiptNumber] = useState('')
+  const [buyerName, setBuyerName] = useState('')
+  const [resendBusy, setResendBusy] = useState(false)
+  const [resendMessage, setResendMessage] = useState<string | null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -58,6 +63,28 @@ export default function Admin() {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleResend(e: React.FormEvent) {
+    e.preventDefault()
+    setResendBusy(true)
+    setResendMessage(null)
+    setError(null)
+    try {
+      const result = await resendAdminConfirmation(token, {
+        receiptNumber: receiptNumber.trim() || undefined,
+        buyerName: buyerName.trim() || undefined,
+      })
+      setResendMessage(
+        result.sent
+          ? `Sent ship-to email for Square order ${result.orderId}.`
+          : `Looked up order ${result.orderId} but did not send (${result.reason ?? 'unknown'}).`,
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Resend failed')
+    } finally {
+      setResendBusy(false)
     }
   }
 
@@ -185,11 +212,50 @@ export default function Admin() {
             >
               Download sheet
             </a>
-            <p className="text-sm text-muted mt-3">
+            <p className="text-sm text-muted mt-3 mb-10">
               Downloads the ICC Netanyahu Medal Register (.xlsx) with paid orders
               filled as Sold (S) rows. Mark Donation Sent and gifts in the sheet
               or Square Dashboard as needed.
             </p>
+
+            <section className="border border-line rounded-2xl p-5">
+              <h2 className="font-semibold mb-2">Resend ship-to email</h2>
+              <p className="text-sm text-muted mb-4">
+                Use this if you missed a fulfilment email. The buyer already gets
+                Square’s own receipt. This sends your ship-to copy to
+                netanyahuwanted@gmail.com.
+              </p>
+              <form onSubmit={handleResend} className="space-y-3">
+                <label className="block text-sm">
+                  Square receipt number
+                  <input
+                    value={receiptNumber}
+                    onChange={(e) => setReceiptNumber(e.target.value)}
+                    placeholder="35tx"
+                    className="mt-1 w-full border border-line rounded-xl px-4 py-3 outline-none focus:border-ink"
+                  />
+                </label>
+                <label className="block text-sm">
+                  Buyer name (if receipt lookup fails)
+                  <input
+                    value={buyerName}
+                    onChange={(e) => setBuyerName(e.target.value)}
+                    placeholder="Rosemary Lyons"
+                    className="mt-1 w-full border border-line rounded-xl px-4 py-3 outline-none focus:border-ink"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={resendBusy}
+                  className="bg-navy text-white rounded-xl px-6 py-3 font-medium hover:bg-ink disabled:opacity-60"
+                >
+                  {resendBusy ? 'Sending…' : 'Send missing confirmation'}
+                </button>
+              </form>
+              {resendMessage ? (
+                <p className="text-sm text-ink mt-3">{resendMessage}</p>
+              ) : null}
+            </section>
           </>
         ) : null}
 
