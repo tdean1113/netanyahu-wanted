@@ -116,8 +116,24 @@ export function getExportUrl(token: string) {
 }
 
 export function sendOrderConfirmation(orderId: string) {
-  return request<{ sent: boolean; reason?: string }>(
+  return request<{ ok: boolean; sent?: boolean; reason?: string }>(
     `/api/orders/${encodeURIComponent(orderId)}/send-confirmation`,
     { method: 'POST' },
   )
+}
+
+export function resendAdminConfirmation(
+  token: string,
+  input: { receiptNumber?: string; buyerName?: string; orderId?: string },
+) {
+  return request<{
+    ok: boolean
+    orderId: string
+    sent: boolean
+    reason?: string
+  }>('/api/admin/resend-confirmation', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  })
 }

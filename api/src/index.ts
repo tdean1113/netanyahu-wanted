@@ -33,6 +33,8 @@ import {
   isDonationOrgId,
   parseAndValidateDonations,
   sendOrderConfirmationIfNeeded,
+  findOrderIdByReceiptNumber,
+  findOrderIdByBuyerName,
 } from './square.js'
 
 assertProductionSecrets()
@@ -171,8 +173,8 @@ app.post(
         res.status(400).json({ error: 'Invalid order id' })
         return
       }
-      await sendOrderConfirmationIfNeeded(orderId)
-      res.json({ ok: true })
+      const result = await sendOrderConfirmationIfNeeded(orderId)
+      res.json({ ok: true, sent: result.sent, reason: result.reason })
     } catch (err) {
       console.error(err)
       res.status(500).json({ error: 'Confirmation email failed' })
@@ -219,13 +221,29 @@ app.post('/api/webhooks/square', async (req, res) => {
             order_id?: string
             id?: string
           }
+          orderUpdated?: {
+            orderId?: string
+            state?: string
+          }
+          order_updated?: {
+            order_id?: string
+            state?: string
+          }
         }
       }
     }
     const type = event.type ?? ''
     const payment = event.data?.object?.payment
-    const orderId = payment?.orderId ?? payment?.order_id
-    const status = payment?.status
+    const orderUpdated = (event.data?.object?.orderUpdated ??
+      event.data?.object?.order_updated) as
+      | { orderId?: string; order_id?: string; state?: string }
+      | undefined
+    const orderId =
+      payment?.orderId ??
+      payment?.order_id ??
+      orderUpdated?.orderId ??
+      orderUpdated?.order_id
+    const status = payment?.status ?? orderUpdated?.state
 
     console.log('Square webhook', {
       type,
@@ -233,9 +251,15 @@ app.post('/api/webhooks/square', async (req, res) => {
       orderId: orderId ? `${orderId.slice(0, 8)}…` : null,
     })
 
-    if (
+    const fromPayment =
       (type === 'payment.updated' || type === 'payment.created') &&
-      status === 'COMPLETED' &&
+      status === 'COMPLETED'
+    const fromCompletedOrder =
+      (type === 'order.updated' || type === 'order.created') &&
+      status === 'COMPLETED'
+
+    if (
+      (fromPayment || fromCompletedOrder) &&
       orderId &&
       isAllowedSquareOrderId(orderId)
     ) {
@@ -309,6 +333,43 @@ app.get('/api/admin/export', adminApiLimiter, async (req, res) => {
     })
   }
 })
+
+app.post(
+  '/api/admin/resend-confirmation',
+  adminApiLimiter,
+  async (req, res) => {
+    if (!requireAdmin(req, res)) return
+    try {
+      const receiptNumber = String(req.body?.receiptNumber ?? '').trim()
+      const buyerName = String(req.body?.buyerName ?? '').trim()
+      let orderId = String(req.body?.orderId ?? '').trim()
+
+      if (!orderId && receiptNumber) {
+        orderId = (await findOrderIdByReceiptNumber(receiptNumber)) ?? ''
+      }
+      if (!orderId && buyerName) {
+        orderId = (await findOrderIdByBuyerName(buyerName)) ?? ''
+      }
+      if (!orderId || !isAllowedSquareOrderId(orderId)) {
+        res.status(404).json({
+          error:
+            'Could not find that Square receipt or buyer name. Try the receipt number (e.g. 35tx) exactly as shown in Square.',
+        })
+        return
+      }
+
+      const result = await sendOrderConfirmationIfNeeded(orderId, {
+        force: true,
+      })
+      res.json({ ok: true, orderId, ...result })
+    } catch (err) {
+      console.error(err)
+      res.status(500).json({
+        error: publicErrorMessage(err, 'Resend failed'),
+      })
+    }
+  },
+)
 
 app.listen(config.port, () => {
   console.log(

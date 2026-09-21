@@ -413,10 +413,15 @@ export async function getOrderConfirmationDetails(
 
 async function sendOrderConfirmationOnce(
   orderId: string,
+  opts?: { force?: boolean },
 ): Promise<{ sent: boolean; reason?: string }> {
   const details = await getOrderConfirmationDetails(orderId)
   if (!details) {
     return { sent: false, reason: 'order_not_found_or_not_medal' }
+  }
+
+  if (opts?.force) {
+    await releaseConfirmationLock(orderId)
   }
 
   const claimed = await claimConfirmationLock(orderId)
@@ -426,7 +431,9 @@ async function sendOrderConfirmationOnce(
 
   try {
     const { sendBuyerOrderConfirmation } = await import('./email.js')
-    const result = await sendBuyerOrderConfirmation(details)
+    const result = await sendBuyerOrderConfirmation(details, {
+      force: opts?.force,
+    })
     if (!result.sent) {
       await releaseConfirmationLock(orderId)
     }
@@ -439,21 +446,91 @@ async function sendOrderConfirmationOnce(
 
 export async function sendOrderConfirmationIfNeeded(
   orderId: string,
+  opts?: { force?: boolean },
 ): Promise<{ sent: boolean; reason?: string }> {
-  const pending = confirmationInFlight.get(orderId)
-  if (pending) {
-    await pending
-    return { sent: false, reason: 'already_sent' }
+  if (!opts?.force) {
+    const pending = confirmationInFlight.get(orderId)
+    if (pending) {
+      await pending
+      return { sent: false, reason: 'already_sent' }
+    }
   }
 
   let work!: Promise<{ sent: boolean; reason?: string }>
-  work = sendOrderConfirmationOnce(orderId).finally(() => {
+  work = sendOrderConfirmationOnce(orderId, opts).finally(() => {
     if (confirmationInFlight.get(orderId) === work) {
       confirmationInFlight.delete(orderId)
     }
   })
   confirmationInFlight.set(orderId, work)
   return work
+}
+
+function normalizeReceiptNumber(value: string): string {
+  return value.trim().replace(/^#/, '').toLowerCase()
+}
+
+export async function findOrderIdByReceiptNumber(
+  receiptNumber: string,
+): Promise<string | null> {
+  if (config.mockMode) return null
+  const needle = normalizeReceiptNumber(receiptNumber)
+  if (!needle) return null
+
+  const beginTime = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString()
+  const page = await getClient().payments.list({
+    locationId: config.square.locationId,
+    beginTime,
+    sortOrder: 'DESC',
+  })
+
+  for await (const payment of page) {
+    const receipt = String(payment.receiptNumber ?? '').toLowerCase()
+    if (receipt === needle && payment.orderId) {
+      return payment.orderId
+    }
+  }
+  return null
+}
+
+export async function findOrderIdByBuyerName(
+  buyerName: string,
+): Promise<string | null> {
+  if (config.mockMode) return null
+  const needle = buyerName.trim().toLowerCase()
+  if (needle.length < 3) return null
+
+  const locationId = config.square.locationId
+  let cursor: string | undefined
+  let best: { orderId: string; createdAt: string } | null = null
+
+  do {
+    const page = await getClient().orders.search({
+      locationIds: [locationId],
+      query: {
+        filter: {
+          stateFilter: { states: ['OPEN', 'COMPLETED'] },
+        },
+        sort: { sortField: 'CREATED_AT', sortOrder: 'DESC' },
+      },
+      cursor,
+      limit: 100,
+    })
+
+    for (const order of page.orders ?? []) {
+      if (!order.id) continue
+      const name = buyerNameFromOrder(order).toLowerCase()
+      if (name.length < 3) continue
+      if (!name.includes(needle) && !needle.includes(name)) continue
+      const createdAt = order.createdAt ?? ''
+      if (!best || createdAt > best.createdAt) {
+        best = { orderId: order.id, createdAt }
+      }
+    }
+    cursor = page.cursor
+  } while (cursor)
+
+  return best?.orderId ?? null
 }
 
 export async function listPaidMedalOrders(): Promise<PaidMedalOrder[]> {

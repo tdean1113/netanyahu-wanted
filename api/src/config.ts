@@ -102,7 +102,10 @@ export const config = {
       'Medal Art Mint <info@netanyahuwanted.com>',
     ),
     /** Optional BCC so you also get a copy of each buyer confirmation. */
-    bcc: required('EMAIL_BCC', 'tdean1113@gmail.com'),
+    bcc: required(
+      'EMAIL_BCC',
+      'netanyahuwanted@gmail.com,tdean1113@gmail.com',
+    ),
     resendApiKey: required('RESEND_API_KEY'),
     smtp: {
       host: required('SMTP_HOST'),

@@ -137,7 +137,12 @@ export async function claimConfirmationLock(orderId: string): Promise<boolean> {
     return true
   }
 
-  throw new Error('Could not claim confirmation email lock')
+  // Prefer sending once over blocking fulfilment mail if Firestore is down.
+  console.error(
+    'Confirmation lock unavailable; sending with in-memory lock only',
+  )
+  memoryHeld.add(orderId)
+  return true
 }
 
 export async function releaseConfirmationLock(orderId: string): Promise<void> {
