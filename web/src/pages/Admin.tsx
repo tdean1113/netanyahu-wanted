@@ -223,7 +223,7 @@ export default function Admin() {
               <p className="text-sm text-muted mb-4">
                 Use this if you missed a fulfilment email. The buyer already gets
                 Square’s own receipt. This sends your ship-to copy to
-                netanyahuwanted@gmail.com.
+                tdean1113@gmail.com only.
               </p>
               <form onSubmit={handleResend} className="space-y-3">
                 <label className="block text-sm">

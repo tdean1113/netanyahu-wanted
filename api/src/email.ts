@@ -37,17 +37,9 @@ function parseEmailList(raw: string): string[] {
     .filter((value) => value.includes('@'))
 }
 
-/** Always include the fulfilment inbox, plus EMAIL_BCC / support if set. */
+/** Fulfilment copy goes only to Tony — not the public shop inboxes. */
 function merchantNotifyAddresses(): string[] {
-  const addresses = new Set<string>(
-    [
-      ...parseEmailList(config.email.bcc),
-      ...parseEmailList(config.merchant.supportEmail),
-      ...parseEmailList(config.email.smtp.user),
-      'netanyahuwanted@gmail.com',
-    ].map((value) => value.toLowerCase()),
-  )
-  return [...addresses]
+  return ['tdean1113@gmail.com']
 }
 
 function buildBuyerBodies(details: OrderConfirmationDetails): {
