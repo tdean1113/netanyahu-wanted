@@ -177,7 +177,8 @@ app.post(
       res.json({ ok: true, sent: result.sent, reason: result.reason })
     } catch (err) {
       console.error(err)
-      res.status(500).json({ error: 'Confirmation email failed' })
+      const detail = err instanceof Error ? err.message : 'Confirmation email failed'
+      res.status(500).json({ error: 'Confirmation email failed', detail })
     }
   },
 )

@@ -217,6 +217,7 @@ async function sendViaSmtp(opts: {
   text: string
   html: string
   bcc?: string
+  from?: string
 }) {
   const transporter = nodemailer.createTransport({
     host: config.email.smtp.host,
@@ -229,7 +230,7 @@ async function sendViaSmtp(opts: {
   })
 
   await transporter.sendMail({
-    from: config.email.from,
+    from: opts.from || config.email.from,
     to: opts.to,
     bcc: opts.bcc || undefined,
     subject: opts.subject,
@@ -246,10 +247,28 @@ async function sendMail(opts: {
   bcc?: string
   idempotencyKey?: string
 }) {
+  const smtpFrom = config.email.smtp.user.includes('@')
+    ? config.email.smtp.user
+    : config.email.from
+
   if (config.email.resendApiKey) {
-    await sendViaResend(opts)
-  } else {
+    try {
+      await sendViaResend(opts)
+      return
+    } catch (err) {
+      console.error('Resend failed, trying SMTP', err)
+    }
+  }
+
+  try {
     await sendViaSmtp(opts)
+  } catch (err) {
+    if (smtpFrom && smtpFrom !== config.email.from) {
+      console.error('SMTP failed with EMAIL_FROM, retrying as SMTP user', err)
+      await sendViaSmtp({ ...opts, from: smtpFrom })
+      return
+    }
+    throw err
   }
 }
 
