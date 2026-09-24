@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
-# Send one ship-to email for a Square buyer using Cloud Run SMTP/Resend settings.
-# Does not call the live API (that path currently returns "Confirmation email failed").
+# Cloud Shell mail helper using Cloud Run SMTP/Resend settings.
+# Default: ship-to email to tdean1113@gmail.com.
+# --thank-you: one shop confirmation to the Square buyer (not Tony).
 set -euo pipefail
+SEND_MODE="merchant"
+if [[ "${1:-}" == "--thank-you" ]]; then
+  SEND_MODE="thank-you"
+  shift
+fi
 NAME="${1:-Leanne Barnes}"
 ORDER_HINT="${2:-}"
 REGION="${REGION:-australia-southeast1}"
@@ -28,7 +34,7 @@ for e in d["spec"]["template"]["spec"]["containers"][0].get("env") or []:
 PY
 )
 
-export NAME ORDER_HINT
+export NAME ORDER_HINT SEND_MODE
 python3 - <<'PY'
 import json, os, smtplib, ssl, sys, urllib.error, urllib.request
 from email.message import EmailMessage
@@ -123,13 +129,23 @@ for f in order.get("fulfillments") or []:
         break
 addr = recipient.get("address") or {}
 who = recipient.get("display_name") or "buyer"
-lines = [
-    "New medal order (manual resend)",
-    "Buyer: " + who,
-    "Email: " + (recipient.get("email_address") or ""),
-    "Phone: " + (recipient.get("phone_number") or ""),
-    "Order ID: " + (order.get("id") or ""),
-    "",
+buyer_email = (recipient.get("email_address") or "").strip()
+send_mode = os.environ.get("SEND_MODE") or "merchant"
+meta = order.get("metadata") or {}
+qty = meta.get("medal_qty") or "1"
+for li in order.get("line_items") or []:
+    if "arrest warrant medal" in (li.get("name") or "").lower():
+        qty = li.get("quantity") or qty
+        break
+try:
+    qty_n = int(float(qty))
+except Exception:
+    qty_n = 1
+total_cents = int((order.get("total_money") or {}).get("amount") or 28000)
+total = "A$%.2f" % (total_cents / 100.0)
+merchant = vals.get("MERCHANT_NAME") or "Medal Art Mint"
+support = vals.get("MERCHANT_SUPPORT_EMAIL") or "info@netanyahuwanted.com"
+addr_lines = [
     addr.get("address_line_1") or "",
     addr.get("address_line_2") or "",
     " ".join(
@@ -143,9 +159,51 @@ lines = [
     ),
     addr.get("country") or "",
 ]
-text = "\n".join(ln for ln in lines if ln is not None)
+addr_lines = [ln for ln in addr_lines if ln]
 
-to_addr = "tdean1113@gmail.com"
+if send_mode == "thank-you":
+    if not buyer_email or "@" not in buyer_email:
+        sys.exit("Square order has no buyer email; cannot send shop thank-you.")
+    to_addr = buyer_email
+    subject = "Order confirmation — ICC Arrest Warrant Medal"
+    text_lines = [
+        "Thank you for your order with %s." % merchant,
+        "",
+        "Order: %s × ICC Arrest Warrant Medal" % qty_n,
+        "Total paid: %s" % total,
+        "",
+        "Your contact details",
+        "Name: %s" % who,
+        "Email: %s" % buyer_email,
+        "",
+        "Delivery address",
+        *(addr_lines or ["(No delivery address on file)"]),
+        "",
+        "Questions? Contact %s" % support,
+        "",
+        merchant,
+    ]
+    text = "\n".join(text_lines)
+    print(
+        "Shop API never delivered this (Confirmation email failed).",
+        "Sending one thank-you To",
+        to_addr,
+        "and not another ship-to to Tony.",
+    )
+else:
+    to_addr = "tdean1113@gmail.com"
+    subject = "New medal order — ship to %s" % who
+    lines = [
+        "New medal order (manual resend)",
+        "Buyer: " + who,
+        "Email: " + buyer_email,
+        "Phone: " + (recipient.get("phone_number") or ""),
+        "Order ID: " + (order.get("id") or ""),
+        "",
+        *addr_lines,
+    ]
+    text = "\n".join(ln for ln in lines if ln is not None)
+
 from_addr = vals.get("EMAIL_FROM") or vals.get("SMTP_USER") or "info@netanyahuwanted.com"
 if "<" in from_addr and ">" in from_addr:
     from_email = from_addr.split("<", 1)[1].split(">", 1)[0].strip()
@@ -158,7 +216,7 @@ smtp_port = int(vals.get("SMTP_PORT") or "587")
 resend_key = vals.get("RESEND_API_KEY") or os.environ.get("RESEND_API_KEY") or ""
 
 msg = EmailMessage()
-msg["Subject"] = "New medal order — ship to %s" % who
+msg["Subject"] = subject
 msg["To"] = to_addr
 msg.set_content(text)
 
@@ -236,5 +294,5 @@ if not sent:
 
 if not sent:
     sys.exit("Could not send email. Last error: %s" % last_err)
-print("Done. Check tdean1113@gmail.com (inbox and spam) for ship-to %s." % who)
+print("Done. Sent to", to_addr, "for", who)
 PY
