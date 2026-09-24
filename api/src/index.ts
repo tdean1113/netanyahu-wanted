@@ -212,30 +212,24 @@ app.post('/api/webhooks/square', async (req, res) => {
 
     const event = req.body as {
       type?: string
-      data?: {
-        type?: string
-        object?: {
-          payment?: {
-            status?: string
-            orderId?: string
-            order_id?: string
-            id?: string
-          }
-          orderUpdated?: {
-            orderId?: string
-            state?: string
-          }
-          order_updated?: {
-            order_id?: string
-            state?: string
-          }
-        }
-      }
+      data?: { object?: Record<string, unknown> }
     }
     const type = event.type ?? ''
-    const payment = event.data?.object?.payment
-    const orderUpdated = (event.data?.object?.orderUpdated ??
-      event.data?.object?.order_updated) as
+    const obj = event.data?.object as {
+      payment?: {
+        status?: string
+        orderId?: string
+        order_id?: string
+        id?: string
+      }
+      status?: string
+      orderId?: string
+      order_id?: string
+      orderUpdated?: { orderId?: string; state?: string }
+      order_updated?: { order_id?: string; state?: string }
+    } | undefined
+    const payment = obj?.payment ?? (obj?.status && (obj.orderId || obj.order_id) ? obj : undefined)
+    const orderUpdated = (obj?.orderUpdated ?? obj?.order_updated) as
       | { orderId?: string; order_id?: string; state?: string }
       | undefined
     const orderId =
