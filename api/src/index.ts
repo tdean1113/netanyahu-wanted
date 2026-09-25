@@ -59,6 +59,15 @@ app.use(
         callback(null, true)
         return
       }
+      try {
+        const frontendOrigin = new URL(config.frontendBaseUrl).origin
+        if (origin === frontendOrigin) {
+          callback(null, true)
+          return
+        }
+      } catch {
+        /* ignore invalid FRONTEND_BASE_URL */
+      }
       // Do not throw — that becomes a 500 for form POSTs (e.g. Instagram checkout).
       callback(null, false)
     },
@@ -216,47 +225,59 @@ app.post('/api/webhooks/square', async (req, res) => {
       data?: { object?: Record<string, unknown> }
     }
     const type = event.type ?? ''
-    const obj = event.data?.object as {
-      payment?: {
-        status?: string
-        orderId?: string
-        order_id?: string
-        id?: string
-      }
-      status?: string
-      orderId?: string
-      order_id?: string
-      orderUpdated?: { orderId?: string; state?: string }
-      order_updated?: { order_id?: string; state?: string }
-    } | undefined
-    const payment = obj?.payment ?? (obj?.status && (obj.orderId || obj.order_id) ? obj : undefined)
-    const orderUpdated = (obj?.orderUpdated ?? obj?.order_updated) as
-      | { orderId?: string; order_id?: string; state?: string }
-      | undefined
-    const orderId =
-      payment?.orderId ??
-      payment?.order_id ??
-      orderUpdated?.orderId ??
-      orderUpdated?.order_id
-    const status = payment?.status ?? orderUpdated?.state
+    const obj = (event.data?.object ?? {}) as Record<string, unknown>
+    const nested = (key: string) =>
+      obj[key] && typeof obj[key] === 'object'
+        ? (obj[key] as Record<string, unknown>)
+        : undefined
+    const payment =
+      nested('payment') ??
+      (typeof obj.status === 'string' && (obj.orderId || obj.order_id)
+        ? obj
+        : undefined)
+    const orderUpdated = nested('orderUpdated') ?? nested('order_updated')
+    const order = nested('order')
+    const candidates = [
+      payment?.orderId,
+      payment?.order_id,
+      orderUpdated?.orderId,
+      orderUpdated?.order_id,
+      order?.id,
+      obj.orderId,
+      obj.order_id,
+    ]
+    const orderId = candidates.find(
+      (value): value is string =>
+        typeof value === 'string' && isAllowedSquareOrderId(value),
+    )
+    const status = [payment?.status, orderUpdated?.state, order?.state].find(
+      (value): value is string => typeof value === 'string',
+    )
 
     console.log('Square webhook', {
       type,
-      status,
+      status: status ?? null,
       orderId: orderId ? `${orderId.slice(0, 8)}…` : null,
     })
 
+    // Payment links often stay OPEN after the card is charged. Do not wait
+    // for COMPLETED — getOrderConfirmationDetails still requires a payment.
     const fromPayment =
       (type === 'payment.updated' || type === 'payment.created') &&
-      status === 'COMPLETED'
-    const fromCompletedOrder =
-      (type === 'order.updated' || type === 'order.created') &&
-      status === 'COMPLETED'
+      (status === 'COMPLETED' || status === 'APPROVED' || !status)
+    const fromOrder =
+      type === 'order.updated' ||
+      type === 'order.created' ||
+      type === 'order.fulfillment.updated'
+    const orderLooksSendable =
+      !status ||
+      status === 'OPEN' ||
+      status === 'COMPLETED' ||
+      status === 'APPROVED'
 
     if (
-      (fromPayment || fromCompletedOrder) &&
-      orderId &&
-      isAllowedSquareOrderId(orderId)
+      (fromPayment || (fromOrder && orderLooksSendable)) &&
+      orderId
     ) {
       const result = await sendOrderConfirmationIfNeeded(orderId)
       console.log('Order confirmation email', {

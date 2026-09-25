@@ -1,22 +1,31 @@
 #!/usr/bin/env bash
 # Cloud Shell mail helper using Cloud Run SMTP/Resend settings.
-# Default: ship-to email to tdean1113@gmail.com.
-# --thank-you: one shop confirmation to the Square buyer (not Tony).
+# Default: newest paid Square order, ship-to email to tdean1113@gmail.com.
+#   --thank-you  one shop confirmation to the Square buyer
+#   --shop       ship-to + buyer thank-you (use this for a missed sale)
 set -euo pipefail
 SEND_MODE="merchant"
-if [[ "${1:-}" == "--thank-you" ]]; then
-  SEND_MODE="thank-you"
-  shift
-fi
-NAME="${1:-Leanne Barnes}"
-ORDER_HINT="${2:-}"
+NAME=""
+ORDER_HINT=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --thank-you) SEND_MODE="thank-you"; shift ;;
+    --shop) SEND_MODE="shop"; shift ;;
+    --latest) NAME=""; shift ;;
+    *)
+      if [[ -z "$NAME" ]]; then NAME="$1"
+      elif [[ -z "$ORDER_HINT" ]]; then ORDER_HINT="$1"
+      fi
+      shift
+      ;;
+  esac
+done
 REGION="${REGION:-australia-southeast1}"
 SERVICE="${SERVICE:-mam-medal-api}"
 
 export CR_JSON
 CR_JSON="$(gcloud run services describe "$SERVICE" --region "$REGION" --format=json)"
 
-# Pull Secret Manager values when Cloud Run env uses valueFrom.secretKeyRef.
 while IFS=$'\t' read -r env_name secret_name; do
   [[ -z "${env_name:-}" || -z "${secret_name:-}" ]] && continue
   if [[ -z "${!env_name:-}" ]]; then
@@ -92,6 +101,18 @@ def square(path, method="GET", body=None):
     with urllib.request.urlopen(req) as resp:
         return json.loads(resp.read().decode())
 
+def recipient_name(order):
+    name = ""
+    for f in order.get("fulfillments") or []:
+        rec = ((f.get("shipment_details") or {}).get("recipient") or {})
+        name = rec.get("display_name") or name
+    return name
+
+def is_paid(order):
+    if order.get("tenders"):
+        return True
+    return order.get("state") == "COMPLETED"
+
 order = None
 if order_hint:
     order = square("/v2/orders/" + order_hint).get("order")
@@ -106,20 +127,29 @@ if not order:
     if location:
         body["location_ids"] = [location]
     data = square("/v2/orders/search", "POST", body)
-    best = None
+    ranked = []
     for o in data.get("orders") or []:
-        name = ""
-        for f in o.get("fulfillments") or []:
-            rec = ((f.get("shipment_details") or {}).get("recipient") or {})
-            name = rec.get("display_name") or name
-        if needle in (name or "").lower() and o.get("id"):
-            created = o.get("created_at") or ""
-            if not best or created > best[0]:
-                best = (created, o, name)
+        if not o.get("id"):
+            continue
+        ranked.append((o.get("created_at") or "", o, recipient_name(o)))
+    ranked.sort(reverse=True)
+    print("Recent orders:")
+    for created, o, name in ranked[:8]:
+        print(" ", created, o.get("id"), name or "(no name)", o.get("state"),
+              "paid" if is_paid(o) else "unpaid")
+    best = None
+    for created, o, name in ranked:
+        if needle:
+            if needle not in (name or "").lower():
+                continue
+        elif not is_paid(o):
+            continue
+        best = (created, o, name)
+        break
     if not best:
-        sys.exit("No Square order matched %r" % os.environ.get("NAME"))
+        sys.exit("No Square order matched %r" % (os.environ.get("NAME") or "latest paid"))
     order = best[1]
-    print("Matched", best[2], order.get("id"))
+    print("Matched", best[2] or "(no name)", order.get("id"))
 
 recipient = {}
 for f in order.get("fulfillments") or []:
@@ -161,39 +191,25 @@ addr_lines = [
 ]
 addr_lines = [ln for ln in addr_lines if ln]
 
-if send_mode == "thank-you":
-    if not buyer_email or "@" not in buyer_email:
-        sys.exit("Square order has no buyer email; cannot send shop thank-you.")
-    to_addr = buyer_email
-    subject = "Order confirmation — ICC Arrest Warrant Medal"
-    text_lines = [
-        "Thank you for your order with %s." % merchant,
-        "",
-        "Order: %s × ICC Arrest Warrant Medal" % qty_n,
-        "Total paid: %s" % total,
-        "",
-        "Your contact details",
-        "Name: %s" % who,
-        "Email: %s" % buyer_email,
-        "",
-        "Delivery address",
-        *(addr_lines or ["(No delivery address on file)"]),
-        "",
-        "Questions? Contact %s" % support,
-        "",
-        merchant,
-    ]
-    text = "\n".join(text_lines)
-    print(
-        "Shop API never delivered this (Confirmation email failed).",
-        "Sending one thank-you To",
-        to_addr,
-        "and not another ship-to to Tony.",
-    )
-else:
-    to_addr = "tdean1113@gmail.com"
-    subject = "New medal order — ship to %s" % who
-    lines = [
+thank_you_text = "\n".join([
+    "Thank you for your order with %s." % merchant,
+    "",
+    "Order: %s × ICC Arrest Warrant Medal" % qty_n,
+    "Total paid: %s" % total,
+    "",
+    "Your contact details",
+    "Name: %s" % who,
+    "Email: %s" % buyer_email,
+    "",
+    "Delivery address",
+    *(addr_lines or ["(No delivery address on file)"]),
+    "",
+    "Questions? Contact %s" % support,
+    "",
+    merchant,
+])
+ship_text = "\n".join(
+    ln for ln in [
         "New medal order (manual resend)",
         "Buyer: " + who,
         "Email: " + buyer_email,
@@ -201,8 +217,24 @@ else:
         "Order ID: " + (order.get("id") or ""),
         "",
         *addr_lines,
-    ]
-    text = "\n".join(ln for ln in lines if ln is not None)
+    ] if ln is not None
+)
+
+jobs = []
+if send_mode in ("merchant", "shop"):
+    jobs.append((
+        "tdean1113@gmail.com",
+        "New medal order — ship to %s" % who,
+        ship_text,
+    ))
+if send_mode in ("thank-you", "shop"):
+    if not buyer_email or "@" not in buyer_email:
+        sys.exit("Square order has no buyer email; cannot send shop thank-you.")
+    jobs.append((
+        buyer_email,
+        "Order confirmation — ICC Arrest Warrant Medal",
+        thank_you_text,
+    ))
 
 from_addr = vals.get("EMAIL_FROM") or vals.get("SMTP_USER") or "info@netanyahuwanted.com"
 if "<" in from_addr and ">" in from_addr:
@@ -215,14 +247,6 @@ smtp_host = vals.get("SMTP_HOST") or "smtp.gmail.com"
 smtp_port = int(vals.get("SMTP_PORT") or "587")
 resend_key = vals.get("RESEND_API_KEY") or os.environ.get("RESEND_API_KEY") or ""
 
-msg = EmailMessage()
-msg["Subject"] = subject
-msg["To"] = to_addr
-msg.set_content(text)
-
-sent = False
-last_err = None
-
 def read_http_error(err):
     body = ""
     try:
@@ -231,35 +255,42 @@ def read_http_error(err):
         pass
     print("  body:", body or "(none)")
 
-if resend_key:
-    payload = {
-        "from": from_addr if "@" in from_addr else from_email,
-        "to": [to_addr],
-        "subject": msg["Subject"],
-        "text": text,
-    }
-    req = urllib.request.Request(
-        "https://api.resend.com/emails",
-        data=json.dumps(payload).encode(),
-        headers={
-            "Authorization": "Bearer " + resend_key,
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            print("Resend:", resp.status, resp.read().decode()[:500])
-            sent = True
-    except urllib.error.HTTPError as err:
-        last_err = err
-        print("Resend failed:", err.code, err.reason)
-        read_http_error(err)
-    except Exception as err:
-        last_err = err
-        print("Resend failed:", err)
-
-if not sent:
+def send_one(to_addr, subject, text):
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["To"] = to_addr
+    msg.set_content(text)
+    sent = False
+    last_err = None
+    if resend_key:
+        payload = {
+            "from": from_addr if "@" in from_addr else from_email,
+            "to": [to_addr],
+            "subject": subject,
+            "text": text,
+        }
+        req = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=json.dumps(payload).encode(),
+            headers={
+                "Authorization": "Bearer " + resend_key,
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req) as resp:
+                print("Resend:", resp.status, resp.read().decode()[:500])
+                sent = True
+        except urllib.error.HTTPError as err:
+            last_err = err
+            print("Resend failed:", err.code, err.reason)
+            read_http_error(err)
+        except Exception as err:
+            last_err = err
+            print("Resend failed:", err)
+    if sent:
+        return
     if not smtp_user or not smtp_pass:
         sys.exit(
             "No SMTP_USER/SMTP_PASS and Resend did not send. Last error: %s" % last_err
@@ -282,8 +313,7 @@ if not sent:
                 smtp.login(smtp_user, smtp_pass)
                 smtp.send_message(msg, from_addr=sender, to_addrs=[to_addr])
             print("SMTP sent From", sender, "To", to_addr)
-            sent = True
-            break
+            return
         except Exception as err:
             last_err = err
             print("SMTP failed From", sender, ":", err)
@@ -291,8 +321,10 @@ if not sent:
                 del msg["From"]
             except Exception:
                 pass
-
-if not sent:
     sys.exit("Could not send email. Last error: %s" % last_err)
-print("Done. Sent to", to_addr, "for", who)
+
+for to_addr, subject, text in jobs:
+    print("Sending %r to %s" % (subject, to_addr))
+    send_one(to_addr, subject, text)
+print("Done. Sent", len(jobs), "message(s) for", who)
 PY
