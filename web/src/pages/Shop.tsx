@@ -85,8 +85,8 @@ export default function Shop() {
   const [recipients, setRecipients] = useState<Array<DonationOrgId | null>>([
     null,
   ])
-  const [sold, setSold] = useState<number | null>(null)
-  const [remaining, setRemaining] = useState<number | null>(null)
+  const [sold, setSold] = useState(0)
+  const [remaining, setRemaining] = useState(EDITION_SIZE)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const checkoutLive = import.meta.env.VITE_SQUARE_LIVE === 'true'
@@ -106,7 +106,6 @@ export default function Shop() {
   }, [])
 
   useEffect(() => {
-    if (remaining == null) return
     applyProductJsonLd({
       name: 'ICC Arrest Warrant Issued Medal',
       description:
@@ -134,7 +133,7 @@ export default function Shop() {
         setRemaining(data.remaining)
       })
       .catch(() => {
-        /* Hide the tally until Square stock is known. */
+        /* keep defaults when API offline */
       })
   }, [])
 
@@ -179,9 +178,8 @@ export default function Shop() {
   )
   const donationTotal = qty * DONATION_PER_MEDAL_AUD
   const orderTotal = qty * UNIT_PRICE_AUD
-  const soldOut = remaining != null && remaining <= 0
   const soldPct = useMemo(
-    () => (sold == null ? 0 : Math.min(100, (sold / EDITION_SIZE) * 100)),
+    () => Math.min(100, (sold / EDITION_SIZE) * 100),
     [sold],
   )
 
@@ -213,7 +211,6 @@ export default function Shop() {
   }
 
   async function handleBuy() {
-    if (remaining == null) return
     if (remaining <= 0) {
       setError('Sold out')
       return
@@ -326,34 +323,6 @@ export default function Shop() {
             </h1>
 
             <div className="mb-6 space-y-4 text-[15px] leading-7 text-ink/90">
-              <p>
-                This limited-edition fine art medal documents the International
-                Criminal Court&apos;s issuance of an arrest warrant for Benjamin
-                Netanyahu, together with the official allegations of war crimes
-                and crimes against humanity arising from the conflict in Gaza. The
-                medal has been created as a permanent archival record, preserving
-                one of the defining legal and humanitarian events of the
-                twenty-first century.
-              </p>
-              <p>
-                The medal also acknowledges the broader historical context of the
-                immense suffering experienced by the Palestinian people and the
-                continuing international legal proceedings and investigations
-                concerning allegations of genocide and other serious violations of
-                international law. It is intended not as a celebration, but as a
-                documentary artefact that records a moment of profound historical
-                significance.
-              </p>
-              <p>
-                For over two thousand years, coins and medals have survived as
-                some of humanity&apos;s most enduring historical records,
-                preserving the actions of governments, leaders and pivotal events
-                long after written and digital records have disappeared. Following
-                this tradition, this medal has been created to endure as a
-                tangible historical witness, allowing future generations to
-                examine and reflect upon this period of history through one of
-                civilisation&apos;s oldest and most permanent artistic media.
-              </p>
               <p className="text-sm text-muted italic">
                 The medal is not licensed or endorsed by the ICC and is published
                 by Medal Art Mint as a record of fact.
@@ -377,30 +346,28 @@ export default function Shop() {
               </div>
 
               <p className="text-sm leading-6 text-ink/80">
-                Medal Art Mint donates half of every sale to a humanitarian
-                organisation working directly in Palestine. You must choose a
-                donation recipient for each medal. The remaining half covers
-                producing the medal, GST in Australia and postage to anywhere in
-                the world.
+                <strong className="font-semibold text-ink">
+                  Half the sale price is donated to one of the 5 humanitarian
+                  organisations working directly in Palestine.
+                </strong>{' '}
+                You must choose a donation recipient for each medal. The
+                remaining half covers producing the medal, GST in Australia and
+                postage to anywhere in the world.
               </p>
 
               <div>
-                {sold != null && remaining != null ? (
-                  <>
-                    <div className="mb-2 flex justify-between text-sm">
-                      <span>
-                        {sold} of {EDITION_SIZE} allocated
-                      </span>
-                      <span>{remaining} remaining</span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-line">
-                      <div
-                        className="h-full bg-navy transition-all"
-                        style={{ width: `${soldPct}%` }}
-                      />
-                    </div>
-                  </>
-                ) : null}
+                <div className="mb-2 flex justify-between text-sm">
+                  <span>
+                    {sold} of {EDITION_SIZE} allocated
+                  </span>
+                  <span>{remaining} remaining</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-line">
+                  <div
+                    className="h-full bg-navy transition-all"
+                    style={{ width: `${soldPct}%` }}
+                  />
+                </div>
                 <p className="mt-2 text-xs leading-5 text-muted">
                   The tally count does not reflect the serial-numbered medal that
                   you will receive. An actual serial number cannot be requested
@@ -579,10 +546,10 @@ export default function Shop() {
               <button
                 type="button"
                 onClick={handleBuy}
-                disabled={busy || soldOut || !allSelected}
+                disabled={busy || remaining <= 0 || !allSelected}
                 className="w-full rounded-lg bg-navy py-3.5 font-semibold text-white hover:bg-ink disabled:opacity-70"
               >
-                {soldOut
+                {remaining <= 0
                   ? 'Sold out'
                   : busy
                     ? 'Redirecting to secure checkout…'
@@ -603,7 +570,17 @@ export default function Shop() {
         </div>
       </main>
 
-      <div className="mx-auto max-w-3xl px-6 pt-10 pb-4 text-sm text-muted">
+      <div className="mx-auto max-w-3xl space-y-6 px-6 pt-10 pb-4 text-sm text-muted">
+        <p className="text-[15px] leading-7 text-ink/90">
+          For over two thousand years, coins and medals have survived as some of
+          humanity&apos;s most enduring historical records, preserving the
+          actions of governments, leaders and pivotal events long after written
+          and digital records have disappeared. Following this tradition, this
+          medal has been created to endure as a tangible historical witness,
+          allowing future generations to examine and reflect upon this period of
+          history through one of civilisation&apos;s oldest and most permanent
+          artistic media.
+        </p>
         <p>
           Contact:{' '}
           <a
