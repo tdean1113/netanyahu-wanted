@@ -217,11 +217,17 @@ async function sendViaSmtp(opts: {
   text: string
   html: string
   bcc?: string
+  from?: string
+  port?: number
 }) {
+  const port = opts.port ?? config.email.smtp.port
   const transporter = nodemailer.createTransport({
     host: config.email.smtp.host,
-    port: config.email.smtp.port,
-    secure: config.email.smtp.port === 465,
+    port,
+    secure: port === 465,
+    connectionTimeout: 8_000,
+    greetingTimeout: 8_000,
+    socketTimeout: 15_000,
     auth: {
       user: config.email.smtp.user,
       pass: config.email.smtp.pass,
@@ -229,7 +235,7 @@ async function sendViaSmtp(opts: {
   })
 
   await transporter.sendMail({
-    from: config.email.from,
+    from: opts.from || config.email.from,
     to: opts.to,
     bcc: opts.bcc || undefined,
     subject: opts.subject,
@@ -246,11 +252,37 @@ async function sendMail(opts: {
   bcc?: string
   idempotencyKey?: string
 }) {
+  const smtpUserFrom = config.email.smtp.user.includes('@')
+    ? config.email.smtp.user
+    : ''
+  const fromCandidates = [
+    ...(smtpUserFrom ? [smtpUserFrom] : []),
+    config.email.from,
+  ].filter((value, index, all) => value && all.indexOf(value) === index)
+
   if (config.email.resendApiKey) {
-    await sendViaResend(opts)
-  } else {
-    await sendViaSmtp(opts)
+    try {
+      await sendViaResend(opts)
+      return
+    } catch (err) {
+      console.error('Resend failed, trying SMTP', err)
+    }
   }
+
+  const ports = config.email.smtp.port === 465 ? [465] : [config.email.smtp.port, 465]
+  let lastErr: unknown
+  for (const from of fromCandidates) {
+    for (const port of ports) {
+      try {
+        await sendViaSmtp({ ...opts, from, port })
+        return
+      } catch (err) {
+        lastErr = err
+        console.error('SMTP failed', { from, port, err })
+      }
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('SMTP send failed')
 }
 
 /** Buyer thank-you + merchant ship-to notice (address for fulfillment). */
