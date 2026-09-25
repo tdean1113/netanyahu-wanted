@@ -46,13 +46,14 @@ const THUMBS = [
 /** Fullscreen gallery order: hero + strip. */
 const GALLERY = [HERO, ...THUMBS]
 
-const SPECS = [
+const SPECS: Array<[string, string]> = [
   ['Size', '60mm'],
   ['Weight', '100gms (+/- 2gms)'],
   ['Metal', '99.9% Copper'],
   ['Finish', 'Antique Patina'],
   ['Packaging', 'Leather-like presentation case'],
-] as const
+  ['Mintage', String(EDITION_SIZE)],
+]
 
 function resizeRecipients(
   current: Array<DonationOrgId | null>,
@@ -336,6 +337,12 @@ export default function Shop() {
                 twenty-first century.
               </p>
               <p>
+                <strong className="font-semibold text-ink">
+                  Half the sale price is donated to one of the 5 humanitarian
+                  organisations working directly in Palestine.
+                </strong>
+              </p>
+              <p>
                 The medal also acknowledges the broader historical context of the
                 immense suffering experienced by the Palestinian people and the
                 continuing international legal proceedings and investigations
@@ -343,16 +350,6 @@ export default function Shop() {
                 international law. It is intended not as a celebration, but as a
                 documentary artefact that records a moment of profound historical
                 significance.
-              </p>
-              <p>
-                For over two thousand years, coins and medals have survived as
-                some of humanity&apos;s most enduring historical records,
-                preserving the actions of governments, leaders and pivotal events
-                long after written and digital records have disappeared. Following
-                this tradition, this medal has been created to endure as a
-                tangible historical witness, allowing future generations to
-                examine and reflect upon this period of history through one of
-                civilisation&apos;s oldest and most permanent artistic media.
               </p>
               <p className="text-sm text-muted italic">
                 The medal is not licensed or endorsed by the ICC and is published
@@ -603,7 +600,17 @@ export default function Shop() {
         </div>
       </main>
 
-      <div className="mx-auto max-w-3xl px-6 pt-10 pb-4 text-sm text-muted">
+      <div className="mx-auto max-w-3xl space-y-6 px-6 pt-10 pb-4 text-sm text-muted">
+        <p className="text-[15px] leading-7 text-ink/90">
+          For over two thousand years, coins and medals have survived as some of
+          humanity&apos;s most enduring historical records, preserving the
+          actions of governments, leaders and pivotal events long after written
+          and digital records have disappeared. Following this tradition, this
+          medal has been created to endure as a tangible historical witness,
+          allowing future generations to examine and reflect upon this period of
+          history through one of civilisation&apos;s oldest and most permanent
+          artistic media.
+        </p>
         <p>
           Contact:{' '}
           <a
