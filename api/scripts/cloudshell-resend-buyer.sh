@@ -3,6 +3,7 @@
 # Default: newest paid Square order, ship-to email to tdean1113@gmail.com.
 #   --thank-you  one shop confirmation to the Square buyer
 #   --shop       ship-to + buyer thank-you (use this for a missed sale)
+#   --print      show the buyer confirmation only (does not send)
 set -euo pipefail
 SEND_MODE="merchant"
 NAME=""
@@ -11,6 +12,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --thank-you) SEND_MODE="thank-you"; shift ;;
     --shop) SEND_MODE="shop"; shift ;;
+    --print|--view|--dry-run) SEND_MODE="print"; shift ;;
     --latest) NAME=""; shift ;;
     *)
       if [[ -z "$NAME" ]]; then NAME="$1"
@@ -68,14 +70,16 @@ def present(key):
     kind = "secret-ref" if key in secret_backed else ("set" if v else "missing")
     return kind
 
-print(
-    "Mail config:",
-    "EMAIL_FROM=%s" % (vals.get("EMAIL_FROM") or "(empty)"),
-    "SMTP_USER=%s" % (vals.get("SMTP_USER") or "(empty)"),
-    "SMTP_HOST=%s" % (vals.get("SMTP_HOST") or "(empty)"),
-    "RESEND_API_KEY=%s" % present("RESEND_API_KEY"),
-    "SMTP_PASS=%s" % present("SMTP_PASS"),
-)
+send_mode = os.environ.get("SEND_MODE") or "merchant"
+if send_mode != "print":
+    print(
+        "Mail config:",
+        "EMAIL_FROM=%s" % (vals.get("EMAIL_FROM") or "(empty)"),
+        "SMTP_USER=%s" % (vals.get("SMTP_USER") or "(empty)"),
+        "SMTP_HOST=%s" % (vals.get("SMTP_HOST") or "(empty)"),
+        "RESEND_API_KEY=%s" % present("RESEND_API_KEY"),
+        "SMTP_PASS=%s" % present("SMTP_PASS"),
+    )
 
 token = vals.get("SQUARE_ACCESS_TOKEN") or os.environ.get("SQUARE_ACCESS_TOKEN") or ""
 location = vals.get("SQUARE_LOCATION_ID") or ""
@@ -133,10 +137,11 @@ if not order:
             continue
         ranked.append((o.get("created_at") or "", o, recipient_name(o)))
     ranked.sort(reverse=True)
-    print("Recent orders:")
-    for created, o, name in ranked[:8]:
-        print(" ", created, o.get("id"), name or "(no name)", o.get("state"),
-              "paid" if is_paid(o) else "unpaid")
+    if send_mode != "print":
+        print("Recent orders:")
+        for created, o, name in ranked[:8]:
+            print(" ", created, o.get("id"), name or "(no name)", o.get("state"),
+                  "paid" if is_paid(o) else "unpaid")
     best = None
     for created, o, name in ranked:
         if needle:
@@ -160,7 +165,6 @@ for f in order.get("fulfillments") or []:
 addr = recipient.get("address") or {}
 who = recipient.get("display_name") or "buyer"
 buyer_email = (recipient.get("email_address") or "").strip()
-send_mode = os.environ.get("SEND_MODE") or "merchant"
 meta = order.get("metadata") or {}
 qty = meta.get("medal_qty") or "1"
 for li in order.get("line_items") or []:
@@ -175,6 +179,19 @@ total_cents = int((order.get("total_money") or {}).get("amount") or 28000)
 total = "A$%.2f" % (total_cents / 100.0)
 merchant = vals.get("MERCHANT_NAME") or "Medal Art Mint"
 support = vals.get("MERCHANT_SUPPORT_EMAIL") or "info@netanyahuwanted.com"
+donation_summary = (meta.get("donation_label") or "").strip()
+receipt_url = ""
+for tender in order.get("tenders") or []:
+    payment_id = tender.get("payment_id") or ""
+    if not payment_id:
+        continue
+    try:
+        pay = square("/v2/payments/" + payment_id).get("payment") or {}
+        receipt_url = pay.get("receipt_url") or ""
+        if receipt_url:
+            break
+    except Exception:
+        pass
 addr_lines = [
     addr.get("address_line_1") or "",
     addr.get("address_line_2") or "",
@@ -191,11 +208,15 @@ addr_lines = [
 ]
 addr_lines = [ln for ln in addr_lines if ln]
 
-thank_you_text = "\n".join([
+thank_you_lines = [
     "Thank you for your order with %s." % merchant,
     "",
     "Order: %s × ICC Arrest Warrant Medal" % qty_n,
     "Total paid: %s" % total,
+]
+if donation_summary:
+    thank_you_lines.append("Donation recipient(s): %s" % donation_summary)
+thank_you_lines += [
     "",
     "Your contact details",
     "Name: %s" % who,
@@ -204,10 +225,15 @@ thank_you_text = "\n".join([
     "Delivery address",
     *(addr_lines or ["(No delivery address on file)"]),
     "",
+]
+if receipt_url:
+    thank_you_lines += ["Square payment receipt: " + receipt_url, ""]
+thank_you_lines += [
     "Questions? Contact %s" % support,
     "",
     merchant,
-])
+]
+thank_you_text = "\n".join(thank_you_lines)
 ship_text = "\n".join(
     ln for ln in [
         "New medal order (manual resend)",
@@ -219,6 +245,16 @@ ship_text = "\n".join(
         *addr_lines,
     ] if ln is not None
 )
+
+if send_mode == "print":
+    smtp_from = vals.get("SMTP_USER") or "netanyahuwanted@gmail.com"
+    print("NOT SENT — this is the shop confirmation the purchaser gets.")
+    print("From: %s" % smtp_from)
+    print("To: %s" % (buyer_email or "(no buyer email on Square order)"))
+    print("Subject: Order confirmation — ICC Arrest Warrant Medal")
+    print("")
+    print(thank_you_text)
+    raise SystemExit(0)
 
 jobs = []
 if send_mode in ("merchant", "shop"):
