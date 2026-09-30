@@ -377,7 +377,8 @@ export default function Shop() {
 
               <p className="text-sm leading-6 text-ink/80">
                 Medal Art Mint donates half of every sale to a humanitarian
-                organisation working directly in Palestine. You must choose a
+                organisation working directly with Palestinian people in
+                Palestine and here in Australia. You must choose a
                 donation recipient for each medal. The remaining half covers
                 producing the medal, GST in Australia and postage to anywhere in
                 the world.
