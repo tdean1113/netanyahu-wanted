@@ -99,7 +99,7 @@ export default function Shop() {
     applySeo({
       title: 'Buy ICC Arrest Warrant Medal — A$280 with A$140 Donation | Medal Art Mint',
       description:
-        'Purchase the limited-edition ICC Arrest Warrant Issued medal. A$280 includes A$140 donation to a humanitarian organisation you choose, plus free postage. Edition of 1000 by Medal Art Mint.',
+        'Purchase the limited-edition ICC Arrest Warrant Issued medal. A$280 includes A$140 donation to a humanitarian organisation you choose, plus free postage to anywhere in the world. Edition of 1000 by Medal Art Mint.',
       path: '/shop',
       type: 'product',
     })
@@ -111,7 +111,7 @@ export default function Shop() {
     applyProductJsonLd({
       name: 'ICC Arrest Warrant Issued Medal',
       description:
-        'Limited-edition commemorative medal by Medal Art Mint. A$280 including A$140 donation and free postage. Edition of 1000.',
+        'Limited-edition commemorative medal by Medal Art Mint. A$280 including A$140 donation and free postage to anywhere in the world. Edition of 1000.',
       priceAud: UNIT_PRICE_AUD,
       remaining,
       editionSize: EDITION_SIZE,
@@ -369,7 +369,7 @@ export default function Shop() {
                 </div>
                 <div className="text-sm text-muted">
                   incl. {formatAud(DONATION_PER_MEDAL_AUD)} donation · free
-                  postage
+                  postage to anywhere in the world
                 </div>
               </div>
 
