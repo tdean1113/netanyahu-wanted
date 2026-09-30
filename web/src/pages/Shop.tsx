@@ -338,8 +338,10 @@ export default function Shop() {
               </p>
               <p>
                 <strong className="font-semibold text-ink">
-                  Half the sale price is donated to one of the 5 humanitarian
-                  organisations working directly in Palestine.
+                  Half of the proceeds from each sale are donated to one of the
+                  five humanitarian organisations listed below, supporting their
+                  work directly with the Palestinian people in Palestine and here
+                  in Australia.
                 </strong>
               </p>
               <p>
