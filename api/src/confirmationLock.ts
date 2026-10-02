@@ -52,6 +52,35 @@ function collectionUrl(projectId: string): string {
   )}/databases/(default)/documents/${COLLECTION}`
 }
 
+async function firestoreDocUrl(
+  identity: GcpIdentity,
+  orderId: string,
+): Promise<string> {
+  return `${collectionUrl(identity.projectId)}/${encodeURIComponent(orderId)}`
+}
+
+async function isStaleLock(
+  identity: GcpIdentity,
+  orderId: string,
+): Promise<boolean> {
+  try {
+    const response = await fetch(await firestoreDocUrl(identity, orderId), {
+      headers: { Authorization: `Bearer ${identity.token}` },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!response.ok) return false
+    const body = (await response.json()) as {
+      fields?: { claimedAt?: { timestampValue?: string } }
+    }
+    const claimedAt = body.fields?.claimedAt?.timestampValue
+    if (!claimedAt) return false
+    const ageMs = Date.now() - Date.parse(claimedAt)
+    return Number.isFinite(ageMs) && ageMs > 2 * 60_000
+  } catch {
+    return false
+  }
+}
+
 async function claimFirestore(
   identity: GcpIdentity,
   orderId: string,
@@ -76,7 +105,31 @@ async function claimFirestore(
     })
 
     if (response.ok) return 'acquired'
-    if (response.status === 409) return 'held'
+    if (response.status === 409) {
+      if (await isStaleLock(identity, orderId)) {
+        await fetch(await firestoreDocUrl(identity, orderId), {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${identity.token}` },
+          signal: AbortSignal.timeout(8000),
+        })
+        const retry = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${identity.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fields: {
+              claimedAt: { timestampValue: new Date().toISOString() },
+            },
+          }),
+          signal: AbortSignal.timeout(8000),
+        })
+        if (retry.ok) return 'acquired'
+        if (retry.status === 409) return 'held'
+      }
+      return 'held'
+    }
 
     const body = await response.text()
     if (!firestoreUnavailableLogged) {
@@ -100,7 +153,7 @@ async function releaseFirestore(orderId: string): Promise<void> {
   const identity = await getGcpIdentity()
   if (!identity) return
 
-  const url = `${collectionUrl(identity.projectId)}/${encodeURIComponent(orderId)}`
+  const url = await firestoreDocUrl(identity, orderId)
   try {
     await fetch(url, {
       method: 'DELETE',

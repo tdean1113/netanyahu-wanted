@@ -347,13 +347,15 @@ export async function getOrderConfirmationDetails(
     (order.lineItems ?? []).some((li) =>
       (li.name ?? '').toLowerCase().includes('arrest warrant medal'),
     )
-  if (!looksLikeMedal) return null
+  const paid = (order.tenders ?? []).length > 0 || order.state === 'COMPLETED'
+  if (!looksLikeMedal && !paid) return null
 
   if (order.state !== 'COMPLETED' && order.state !== 'OPEN') {
     // Payment-link orders often move OPEN → COMPLETED; allow both once paid.
     // Unpaid drafts are DRAFT.
   }
   if (order.state === 'DRAFT' || order.state === 'CANCELED') return null
+  if (!paid && order.state === 'OPEN') return null
 
   const donations = parseDonationsFromOrder({
     metadata: order.metadata ?? null,
