@@ -448,9 +448,39 @@ export default function Shop() {
                   <svg
                     viewBox="0 0 24 24"
                     aria-hidden="true"
-                    className="h-5 w-5 fill-current"
+                    className="h-7 w-7 shrink-0"
                   >
-                    <path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm12.5 1.5a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />
+                    <defs>
+                      <radialGradient
+                        id="ig-cam-gradient"
+                        cx="30%"
+                        cy="107%"
+                        r="150%"
+                      >
+                        <stop offset="0%" stopColor="#fdf497" />
+                        <stop offset="5%" stopColor="#fdf497" />
+                        <stop offset="45%" stopColor="#fd5949" />
+                        <stop offset="60%" stopColor="#d6249f" />
+                        <stop offset="90%" stopColor="#285AEB" />
+                      </radialGradient>
+                    </defs>
+                    <rect
+                      x="2"
+                      y="2"
+                      width="20"
+                      height="20"
+                      rx="5"
+                      fill="url(#ig-cam-gradient)"
+                    />
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="4.2"
+                      fill="none"
+                      stroke="#fff"
+                      strokeWidth="1.8"
+                    />
+                    <circle cx="17.2" cy="6.8" r="1.15" fill="#fff" />
                   </svg>
                   @icc_arrest_warrant
                 </a>
