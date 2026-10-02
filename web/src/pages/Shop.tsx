@@ -408,34 +408,52 @@ export default function Shop() {
                 </p>
               </div>
 
-              <div>
-                <div className="mb-1 text-xs font-semibold tracking-[0.14em] uppercase">
-                  Quantity
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <div className="mb-1 text-xs font-semibold tracking-[0.14em] uppercase">
+                    Quantity
+                  </div>
+                  <div className="mb-3 text-sm text-muted">
+                    Up to {MAX_QTY} per order
+                  </div>
+                  <div className="inline-flex items-center overflow-hidden rounded-xl border border-line bg-white">
+                    <button
+                      type="button"
+                      aria-label="Decrease quantity"
+                      disabled={qty <= 1}
+                      onClick={() => setQuantity(qty - 1)}
+                      className="h-11 w-11 disabled:opacity-40"
+                    >
+                      −
+                    </button>
+                    <div className="w-12 text-center font-medium">{qty}</div>
+                    <button
+                      type="button"
+                      aria-label="Increase quantity"
+                      disabled={qty >= MAX_QTY}
+                      onClick={() => setQuantity(qty + 1)}
+                      className="h-11 w-11 disabled:opacity-40"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
-                <div className="mb-3 text-sm text-muted">
-                  Up to {MAX_QTY} per order
-                </div>
-                <div className="inline-flex items-center overflow-hidden rounded-xl border border-line bg-white">
-                  <button
-                    type="button"
-                    aria-label="Decrease quantity"
-                    disabled={qty <= 1}
-                    onClick={() => setQuantity(qty - 1)}
-                    className="h-11 w-11 disabled:opacity-40"
+                <a
+                  href="https://www.instagram.com/icc_arrest_warrant/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm text-link hover:underline"
+                  aria-label="Instagram @icc_arrest_warrant"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    className="h-5 w-5 fill-current"
                   >
-                    −
-                  </button>
-                  <div className="w-12 text-center font-medium">{qty}</div>
-                  <button
-                    type="button"
-                    aria-label="Increase quantity"
-                    disabled={qty >= MAX_QTY}
-                    onClick={() => setQuantity(qty + 1)}
-                    className="h-11 w-11 disabled:opacity-40"
-                  >
-                    +
-                  </button>
-                </div>
+                    <path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm12.5 1.5a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />
+                  </svg>
+                  @icc_arrest_warrant
+                </a>
               </div>
 
               <div>
