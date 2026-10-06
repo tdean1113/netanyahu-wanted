@@ -533,6 +533,48 @@ export async function findOrderIdByBuyerName(
   return best?.orderId ?? null
 }
 
+function isMedalOrder(order: {
+  metadata?: Record<string, string | null> | null
+  lineItems?: Array<{ name?: string | null; quantity?: string | null }> | null
+}): boolean {
+  const product = order.metadata?.product ?? ''
+  if (
+    product === 'icc-arrest-warrant-medal' ||
+    product === 'netanyahu-wanted-medal'
+  ) {
+    return true
+  }
+  return (order.lineItems ?? []).some((li) => {
+    const name = (li.name ?? '').toLowerCase()
+    return (
+      name.includes('arrest warrant medal') ||
+      name.includes('netanyahu wanted medal')
+    )
+  })
+}
+
+/** True when every tender payment on the order is fully refunded. */
+async function isOrderFullyRefunded(order: {
+  tenders?: Array<{ paymentId?: string | null } | null> | null
+}): Promise<boolean> {
+  const paymentIds = (order.tenders ?? [])
+    .map((t) => t?.paymentId)
+    .filter((id): id is string => Boolean(id))
+  if (paymentIds.length === 0) return false
+
+  for (const paymentId of paymentIds) {
+    try {
+      const payment = await getClient().payments.get({ paymentId })
+      const amount = Number(payment.payment?.amountMoney?.amount ?? 0)
+      const refunded = Number(payment.payment?.refundedMoney?.amount ?? 0)
+      if (!(amount > 0 && refunded >= amount)) return false
+    } catch {
+      return false
+    }
+  }
+  return true
+}
+
 export async function listPaidMedalOrders(): Promise<PaidMedalOrder[]> {
   if (config.mockMode) {
     return []
@@ -556,12 +598,8 @@ export async function listPaidMedalOrders(): Promise<PaidMedalOrder[]> {
     })
 
     for (const order of page.orders ?? []) {
-      const looksLikeMedal =
-        order.metadata?.product === 'icc-arrest-warrant-medal' ||
-        (order.lineItems ?? []).some((li) =>
-          (li.name ?? '').toLowerCase().includes('arrest warrant medal'),
-        )
-      if (!looksLikeMedal) continue
+      if (!isMedalOrder(order)) continue
+      if (await isOrderFullyRefunded(order)) continue
 
       const donations = parseDonationsFromOrder({
         metadata: order.metadata ?? null,
@@ -576,9 +614,13 @@ export async function listPaidMedalOrders(): Promise<PaidMedalOrder[]> {
         Math.max(
           0,
           ...(order.lineItems ?? [])
-            .filter((li) =>
-              (li.name ?? '').toLowerCase().includes('arrest warrant medal'),
-            )
+            .filter((li) => {
+              const name = (li.name ?? '').toLowerCase()
+              return (
+                name.includes('arrest warrant medal') ||
+                name.includes('netanyahu wanted medal')
+              )
+            })
             .map((li) => Number(li.quantity ?? 0)),
         )
 
