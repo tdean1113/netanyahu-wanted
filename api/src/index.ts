@@ -93,6 +93,22 @@ app.get('/api/inventory', async (_req, res) => {
   }
 })
 
+/** Public donation total from paid medal sales only (gifts excluded). */
+app.get('/api/donations/total', async (_req, res) => {
+  try {
+    const summary = await getDonationSummary()
+    res.json({
+      totalDonationAud: summary.totalDonationAud,
+      medalsSold: summary.totalMedalsSold,
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({
+      error: publicErrorMessage(err, 'Donation total lookup failed'),
+    })
+  }
+})
+
 function parseCheckoutInput(body: {
   quantity?: unknown
   donations?: unknown

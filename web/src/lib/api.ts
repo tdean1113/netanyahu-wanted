@@ -55,6 +55,15 @@ export function getInventory() {
   return request<InventoryResponse>('/api/inventory')
 }
 
+export interface DonationTotalResponse {
+  totalDonationAud: number
+  medalsSold: number
+}
+
+export function getDonationTotal() {
+  return request<DonationTotalResponse>('/api/donations/total')
+}
+
 export function createCheckout(
   quantity: number,
   donations: Partial<Record<DonationOrgId, number>>,

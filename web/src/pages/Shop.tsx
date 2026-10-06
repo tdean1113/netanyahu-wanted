@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import SiteFooter from '../components/SiteFooter'
 import {
   createCheckout,
+  getDonationTotal,
   getInventory,
   isRestrictedInAppBrowser,
   startCheckoutViaNavigation,
@@ -88,6 +89,9 @@ export default function Shop() {
   ])
   const [sold, setSold] = useState<number | null>(null)
   const [remaining, setRemaining] = useState<number | null>(null)
+  const [donationToDateAud, setDonationToDateAud] = useState<number | null>(
+    null,
+  )
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const checkoutLive = import.meta.env.VITE_SQUARE_LIVE === 'true'
@@ -136,6 +140,13 @@ export default function Shop() {
       })
       .catch(() => {
         /* Hide the tally until Square stock is known. */
+      })
+    getDonationTotal()
+      .then((data) => {
+        setDonationToDateAud(data.totalDonationAud)
+      })
+      .catch(() => {
+        /* Hide donation total until Square paid orders are known. */
       })
   }, [])
 
@@ -374,6 +385,16 @@ export default function Shop() {
                   postage to anywhere in the world
                 </div>
               </div>
+
+              {donationToDateAud != null ? (
+                <p className="text-base font-semibold text-ink">
+                  Donation to Date: {formatAud(donationToDateAud)}
+                  <span aria-hidden="true">*</span>
+                  <span className="sr-only">
+                    See note below about purchases versus allocated medals
+                  </span>
+                </p>
+              ) : null}
 
               <p className="text-sm leading-6 text-ink/80">
                 Medal Art Mint donates half of every sale to a humanitarian
@@ -646,6 +667,16 @@ export default function Shop() {
                   ? 'Secure payment by Square. Apple Pay and Google Pay appear at the top of checkout — Credit Card Payment below. Your donation choices are recorded with your order.'
                   : 'Sandbox / test mode — set VITE_SQUARE_LIVE=true when your production Square key is ready. Donation choices are still recorded.'}
               </p>
+
+              {donationToDateAud != null ? (
+                <p className="text-xs leading-5 text-muted">
+                  * The “Donation to Date” amount reflects medals purchased
+                  rather than medals allocated. A number of medals have been
+                  gifted to individuals and organisations in recognition of
+                  their contribution to raising awareness and supporting the
+                  Palestinian cause.
+                </p>
+              ) : null}
             </div>
           </section>
         </div>
